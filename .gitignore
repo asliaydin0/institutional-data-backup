@@ -1,0 +1,51 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+.venv/
+venv/
+env/
+ENV/
+
+# Dağıtım / paketleme
+build/
+dist/
+*.egg-info/
+.eggs/
+*.spec.bak
+packaging/__pycache__/
+
+# Uygulama çalışma verileri
+config/config.yaml
+data/*.db
+data/*.db-*
+logs/*.log
+logs/*.log.*
+temp/**
+!temp/.gitkeep
+!data/.gitkeep
+!logs/.gitkeep
+
+# IDE / OS
+.idea/
+.vscode/
+*.swp
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Test / coverage
+.pytest_cache/
+.coverage
+htmlcov/
+.mypy_cache/
+.ruff_cache/
+
+# TEST MODE üretilen veriler (kaynak şablonları script ile oluşur)
+tests/test_data/**
+!tests/test_data/.gitkeep
+!tests/test_data/README.md
+test_server/**
+!test_server/.gitkeep

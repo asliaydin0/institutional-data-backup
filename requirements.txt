@@ -1,0 +1,10 @@
+# Kurum Yedekleme - bağımlılıklar
+# Python 3.11+
+
+# Arayüz (Essentials yeterli; Addons zorunlu değil)
+PySide6-Essentials>=6.6.0,<7.0.0
+PyYAML>=6.0.1,<7.0.0
+PyInstaller>=6.3.0,<7.0.0
+
+# Test
+pytest>=8.0.0,<9.0.0
