@@ -1,4 +1,4 @@
-"""Güvenli ZIP oluşturma — kaynaklar yalnızca okunur."""
+"""Güvenli ZIP oluşturma — kaynaklar yalnızca okunur; hedefte .tmp → .zip."""
 
 from __future__ import annotations
 
@@ -11,27 +11,28 @@ from datetime import datetime
 from pathlib import Path
 from typing import Callable, Optional, Sequence
 
+from kurum_yedekleme.core.filenames import tmp_name_for
 from kurum_yedekleme.utils.app_logger import get_logger
 
 logger = get_logger("ZipEngine")
 
 ProgressCallback = Callable[[int, int, Path], None]
-"""(işlenen_dosya_sayısı, toplam_dosya, mevcut_dosya) → None"""
 
 
 class ZipperError(Exception):
     """ZIP oluşturma hatası."""
 
 
+class BackupCancelledError(ZipperError):
+    """Kullanıcı iptali."""
+
+
 @dataclass
 class ZipBuildResult:
-    """ZIP oluşturma sonucu."""
-
     zip_path: Path
     file_count: int
     original_size: int
     zip_size: int
-    compression_ratio_percent: float
     skipped_files: list[str] = field(default_factory=list)
     error_files: list[str] = field(default_factory=list)
 
@@ -44,11 +45,6 @@ def iter_source_files(
     source_root: Path,
     exclude_patterns: Sequence[str] | None = None,
 ) -> list[Path]:
-    """
-    Kaynak klasördeki dosyaları özyinelemeli listeler.
-
-    Yalnızca dosyalar döner; klasör girdileri eklenmez.
-    """
     patterns = list(exclude_patterns or [])
     root = source_root.resolve()
     files: list[Path] = []
@@ -70,11 +66,6 @@ def iter_source_files(
 
 
 def safe_arcname(source_root: Path, file_path: Path) -> str:
-    """
-    ZIP içi göreli yolu üretir (POSIX ayırıcı).
-
-    Path traversal (.. ) engellenir.
-    """
     root = source_root.resolve()
     resolved = file_path.resolve()
     try:
@@ -89,30 +80,45 @@ def safe_arcname(source_root: Path, file_path: Path) -> str:
 
 
 def _set_utf8_flag(info: zipfile.ZipInfo) -> None:
-    """Türkçe/Unicode dosya adları için UTF-8 bayrağını açar."""
     info.flag_bits |= 0x800
 
 
 def _open_source_readonly(path: Path):
-    """Kaynağı salt okunur açar (yazma/silme yok)."""
-    return open(path, "rb")  # noqa: SIM115 — çağıran kapatır
+    return open(path, "rb")  # noqa: SIM115
 
 
-def verify_zip(zip_path: Path) -> None:
-    """ZIP bütünlüğünü testzip ile doğrular."""
+def validate_zip_central_directory(zip_path: Path) -> None:
+    """Merkezi dizini okur — tam içerik taraması (testzip) yapmaz."""
     try:
         with zipfile.ZipFile(zip_path, mode="r") as archive:
-            bad = archive.testzip()
-            if bad is not None:
-                raise ZipperError(f"Bozuk ZIP üyesi: {bad}")
-            # En azından merkezi dizin okunabilmeli
             _ = archive.namelist()
     except zipfile.BadZipFile as exc:
         raise ZipperError(f"ZIP bozuk veya okunamıyor: {zip_path}") from exc
 
 
+def cleanup_orphan_tmps(root: Path) -> int:
+    """Hedef ağaçtaki orphan .*.tmp dosyalarını siler. Kaynağa dokunmaz."""
+    root = Path(root)
+    if not root.is_dir():
+        return 0
+    removed = 0
+    try:
+        for tmp in root.rglob("*.tmp"):
+            if not tmp.name.startswith("."):
+                continue
+            try:
+                tmp.unlink()
+                removed += 1
+                logger.info("Orphan tmp silindi: %s", tmp, operation="cleanup")
+            except OSError as exc:
+                logger.warning("Orphan tmp silinemedi: %s (%s)", tmp, exc)
+    except OSError:
+        pass
+    return removed
+
+
 class Zipper:
-    """Kaynak klasörden salt-okunur, atomik ZIP üretici."""
+    """Kaynak klasörden salt-okunur ZIP; yarım dosya yalnızca .tmp adında."""
 
     def __init__(
         self,
@@ -132,13 +138,8 @@ class Zipper:
         *,
         progress_callback: Optional[ProgressCallback] = None,
         files: Optional[Sequence[Path]] = None,
+        cancel_check: Optional[Callable[[], bool]] = None,
     ) -> ZipBuildResult:
-        """
-        Kaynak klasörü geçici ZIP'e yazar, doğrular, nihai ada taşır.
-
-        Kaynak dosyalara yazılmaz / silinmez.
-        files verilirse ikinci kez dizin taraması yapılmaz (büyük ağaçlar).
-        """
         source_root = Path(source_root)
         final_zip_path = Path(final_zip_path)
 
@@ -148,15 +149,9 @@ class Zipper:
             raise ZipperError(f"Kaynak bir klasör değil: {source_root}")
 
         final_zip_path.parent.mkdir(parents=True, exist_ok=True)
-        partial_path = final_zip_path.with_suffix(final_zip_path.suffix + ".partial")
-        if partial_path.exists():
-            partial_path.unlink()
-        if final_zip_path.exists():
-            # Aynı ada üzerine yazmadan önce eski nihai dosyayı kaldırma —
-            # yalnızca partial üzerinden atomik replace ile değişir.
-            # Çakışmayı önlemek için partial hazırlanana kadar final'e dokunulmaz;
-            # replace anında üzerine yazılır.
-            pass
+        tmp_path = final_zip_path.parent / tmp_name_for(final_zip_path.stem)
+        if tmp_path.exists():
+            tmp_path.unlink()
 
         file_list: list[Path] = (
             list(files)
@@ -169,30 +164,35 @@ class Zipper:
         error_files: list[str] = []
         skipped_files: list[str] = []
 
-        # Boyut toplamı ZIP döngüsünde tek seferde alınır (çift stat yok)
-
-        logger.info("ZIP oluşturuluyor (geçici): %s", partial_path, operation="create")
+        logger.info("ZIP oluşturuluyor (geçici): %s", tmp_path, operation="create")
 
         try:
             with zipfile.ZipFile(
-                partial_path,
+                tmp_path,
                 mode="w",
                 compression=zipfile.ZIP_DEFLATED,
                 compresslevel=self.compresslevel,
                 allowZip64=True,
             ) as archive:
                 for index, file_path in enumerate(file_list, start=1):
+                    if cancel_check is not None and cancel_check():
+                        raise BackupCancelledError("Yedekleme iptal edildi.")
                     try:
                         arcname = safe_arcname(source_root, file_path)
                         size = self._add_file(archive, file_path, arcname)
                         original_size += size
                         added += 1
-                    except Exception as exc:  # noqa: BLE001 — dosya bazlı izolasyon
+                    except BackupCancelledError:
+                        raise
+                    except Exception as exc:  # noqa: BLE001
                         msg = f"{file_path}: {exc}"
                         logger.error("ZIP'e eklenemedi: %s", msg)
                         error_files.append(msg)
                     if progress_callback is not None:
                         progress_callback(index, total, file_path)
+
+            if cancel_check is not None and cancel_check():
+                raise BackupCancelledError("Yedekleme iptal edildi.")
 
             if added == 0 and total > 0:
                 detail = "; ".join(error_files[:3]) if error_files else "bilinmeyen neden"
@@ -201,32 +201,26 @@ class Zipper:
                     f"Örnek: {detail}"
                 )
 
-            verify_zip(partial_path)
-
-            # Atomik nihai ad: aynı dizinde replace
-            os.replace(partial_path, final_zip_path)
+            validate_zip_central_directory(tmp_path)
+            os.replace(tmp_path, final_zip_path)
         except Exception:
-            if partial_path.exists():
+            if tmp_path.exists():
                 try:
-                    partial_path.unlink()
+                    tmp_path.unlink()
                 except OSError as cleanup_exc:
                     logger.warning(
                         "Geçici ZIP silinemedi: %s (%s)",
-                        partial_path,
+                        tmp_path,
                         cleanup_exc,
                     )
             raise
 
         zip_size = final_zip_path.stat().st_size
-        from kurum_yedekleme.utils.formatting import compression_ratio_percent
-
-        ratio = compression_ratio_percent(original_size, zip_size)
         logger.info(
-            "ZIP oluşturuldu: %s (dosya=%s, zip=%s bayt, oran=%%%s)",
+            "ZIP oluşturuldu: %s (dosya=%s, zip=%s bayt)",
             final_zip_path,
             added,
             zip_size,
-            ratio,
             operation="create",
         )
         return ZipBuildResult(
@@ -234,7 +228,6 @@ class Zipper:
             file_count=added,
             original_size=original_size,
             zip_size=zip_size,
-            compression_ratio_percent=ratio,
             skipped_files=skipped_files,
             error_files=error_files,
         )
@@ -245,12 +238,6 @@ class Zipper:
         file_path: Path,
         arcname: str,
     ) -> int:
-        """
-        Tek dosyayı UTF-8 bayraklı ve chunk'lı olarak ZIP'e ekler (streaming).
-
-        Returns:
-            Dosya boyutu (bayt).
-        """
         st = file_path.stat()
         size = st.st_size
         info = zipfile.ZipInfo(filename=arcname)
@@ -267,7 +254,6 @@ class Zipper:
         )
         _set_utf8_flag(info)
 
-        # Kaynak yalnızca okunur; chunk ile kopyala (büyük dosya → sabit bellek ~chunk_size)
         with _open_source_readonly(file_path) as src, archive.open(
             info, mode="w", force_zip64=size > (1 << 31)
         ) as dest:

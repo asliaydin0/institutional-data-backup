@@ -10,13 +10,12 @@ COMPONENT_ALIASES: dict[str, str] = {
     "kurum_yedekleme.app": "App",
     "kurum_yedekleme.core.backup_engine": "BackupEngine",
     "kurum_yedekleme.core.zipper": "ZipEngine",
-    "kurum_yedekleme.core.transfer": "TransferService",
-    "kurum_yedekleme.core.integrity": "IntegrityService",
     "kurum_yedekleme.core.retry": "Retry",
     "kurum_yedekleme.services.schedule_service": "BackupScheduler",
-    "kurum_yedekleme.services.backup_service": "BackupService",
+    "kurum_yedekleme.services.backup_manager": "BackupManager",
     "kurum_yedekleme.services.history_service": "HistoryService",
-    "kurum_yedekleme.services.autostart": "Autostart",
+    "kurum_yedekleme.services.area_service": "AreaService",
+    "kurum_yedekleme.service_host": "WinService",
     "kurum_yedekleme.utils.logging_setup": "Logging",
 }
 

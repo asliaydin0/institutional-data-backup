@@ -33,6 +33,8 @@ hiddenimports = [
     "sqlite3",
     "kurum_yedekleme",
     "kurum_yedekleme.app",
+    "kurum_yedekleme.service_host",
+    "kurum_yedekleme.win_service",
     "kurum_yedekleme.testing",
     "kurum_yedekleme.testing.runner",
     "kurum_yedekleme.testing.fixtures",

@@ -1,4 +1,4 @@
-"""Yedekleme geçmişi repository — yalnızca SQL erişimi."""
+"""Yedekleme geçmişi repository."""
 
 from __future__ import annotations
 
@@ -9,24 +9,23 @@ from typing import Any, Optional
 
 from kurum_yedekleme.db.connection import Database
 from kurum_yedekleme.db.errors import DatabaseError
-from kurum_yedekleme.db.models import BackupHistoryRecord, BackupStatus
+from kurum_yedekleme.db.models import BackupHistoryRecord, BackupStatus, BackupType
 
 logger = logging.getLogger(__name__)
 
 _SELECT_COLUMNS = """
     id,
-    backup_start_time,
-    backup_end_time,
-    source_path,
-    destination_path,
+    area_id,
+    area_name,
+    backup_type,
+    started_at,
+    completed_at,
+    duration_seconds,
+    backup_file,
+    file_size,
     file_count,
-    original_size,
-    compressed_size,
-    compression_ratio,
-    sha256,
     status,
-    error_message,
-    retry_count
+    error_message
 """
 
 
@@ -44,26 +43,29 @@ def _parse_dt(value: Optional[str]) -> Optional[datetime]:
 
 
 def _row_to_record(row: sqlite3.Row) -> BackupHistoryRecord:
+    area_id_raw = row["area_id"]
     return BackupHistoryRecord(
         id=int(row["id"]),
-        backup_start_time=_parse_dt(row["backup_start_time"])  # type: ignore[arg-type]
-        or datetime.now(timezone.utc),
-        backup_end_time=_parse_dt(row["backup_end_time"]),
-        source_path=str(row["source_path"]),
-        destination_path=row["destination_path"],
+        area_id=int(area_id_raw) if area_id_raw is not None else None,
+        area_name=str(row["area_name"]),
+        backup_type=BackupType.parse(str(row["backup_type"])),
+        started_at=_parse_dt(row["started_at"]) or datetime.now(timezone.utc),
+        completed_at=_parse_dt(row["completed_at"]),
+        duration_seconds=(
+            float(row["duration_seconds"])
+            if row["duration_seconds"] is not None
+            else None
+        ),
+        backup_file=row["backup_file"],
+        file_size=int(row["file_size"] or 0),
         file_count=int(row["file_count"] or 0),
-        original_size=int(row["original_size"] or 0),
-        compressed_size=int(row["compressed_size"] or 0),
-        compression_ratio=float(row["compression_ratio"] or 0.0),
-        sha256=row["sha256"],
         status=BackupStatus.parse(str(row["status"])),
         error_message=row["error_message"],
-        retry_count=int(row["retry_count"] or 0),
     )
 
 
 class HistoryRepository:
-    """backup_history tablosu için CRUD / sorgu katmanı."""
+    """backup_history CRUD / sorgu katmanı."""
 
     def __init__(self, database: Database) -> None:
         self._db = database
@@ -71,41 +73,38 @@ class HistoryRepository:
     def insert_running(
         self,
         *,
-        source_path: str,
-        destination_path: Optional[str],
+        area_id: Optional[int],
+        area_name: str,
+        backup_type: BackupType,
         start_time: Optional[datetime] = None,
     ) -> int:
-        """RUNNING durumunda yeni kayıt ekler; id döner."""
         started = start_time or datetime.now(timezone.utc)
         conn = self._db.connect()
         try:
             cursor = conn.execute(
                 """
                 INSERT INTO backup_history (
-                    backup_start_time,
-                    backup_end_time,
-                    source_path,
-                    destination_path,
-                    file_count,
-                    original_size,
-                    compressed_size,
-                    compression_ratio,
-                    sha256,
-                    status,
-                    error_message,
-                    retry_count
-                ) VALUES (?, NULL, ?, ?, 0, 0, 0, 0, NULL, ?, NULL, 0)
+                    area_id, area_name, backup_type, started_at, completed_at,
+                    duration_seconds, backup_file, file_size, file_count,
+                    status, error_message
+                ) VALUES (?, ?, ?, ?, NULL, NULL, NULL, 0, 0, ?, NULL)
                 """,
                 (
+                    area_id,
+                    area_name,
+                    backup_type.value,
                     _to_iso(started),
-                    source_path,
-                    destination_path,
                     BackupStatus.RUNNING.value,
                 ),
             )
             conn.commit()
             record_id = int(cursor.lastrowid)
-            logger.info("Geçmiş kaydı oluşturuldu id=%s status=RUNNING", record_id)
+            logger.info(
+                "Geçmiş RUNNING id=%s alan=%s tür=%s",
+                record_id,
+                area_name,
+                backup_type.value,
+            )
             return record_id
         except sqlite3.Error as exc:
             conn.rollback()
@@ -117,16 +116,12 @@ class HistoryRepository:
         *,
         status: BackupStatus,
         end_time: Optional[datetime] = None,
-        destination_path: Optional[str] = None,
+        backup_file: Optional[str] = None,
+        file_size: int = 0,
         file_count: int = 0,
-        original_size: int = 0,
-        compressed_size: int = 0,
-        compression_ratio: float = 0.0,
-        sha256: Optional[str] = None,
         error_message: Optional[str] = None,
-        retry_count: int = 0,
+        duration_seconds: Optional[float] = None,
     ) -> None:
-        """Kaydı tamamlar / günceller."""
         if status == BackupStatus.RUNNING:
             raise DatabaseError("update_finished RUNNING ile çağrılamaz.")
         finished = end_time or datetime.now(timezone.utc)
@@ -135,29 +130,23 @@ class HistoryRepository:
             cursor = conn.execute(
                 """
                 UPDATE backup_history SET
-                    backup_end_time = ?,
-                    destination_path = COALESCE(?, destination_path),
+                    completed_at = ?,
+                    duration_seconds = ?,
+                    backup_file = COALESCE(?, backup_file),
+                    file_size = ?,
                     file_count = ?,
-                    original_size = ?,
-                    compressed_size = ?,
-                    compression_ratio = ?,
-                    sha256 = ?,
                     status = ?,
-                    error_message = ?,
-                    retry_count = ?
+                    error_message = ?
                 WHERE id = ?
                 """,
                 (
                     _to_iso(finished),
-                    destination_path,
+                    duration_seconds,
+                    backup_file,
+                    file_size,
                     file_count,
-                    original_size,
-                    compressed_size,
-                    compression_ratio,
-                    sha256,
                     status.value,
                     error_message,
-                    retry_count,
                     record_id,
                 ),
             )
@@ -165,7 +154,7 @@ class HistoryRepository:
                 raise DatabaseError(f"Geçmiş kaydı bulunamadı: id={record_id}")
             conn.commit()
             logger.info(
-                "Geçmiş kaydı güncellendi id=%s status=%s",
+                "Geçmiş güncellendi id=%s status=%s",
                 record_id,
                 status.value,
             )
@@ -191,7 +180,7 @@ class HistoryRepository:
             f"""
             SELECT {_SELECT_COLUMNS}
             FROM backup_history
-            ORDER BY backup_start_time DESC, id DESC
+            ORDER BY started_at DESC, id DESC
             LIMIT ?
             """,
             (limit,),
@@ -211,47 +200,120 @@ class HistoryRepository:
             SELECT {_SELECT_COLUMNS}
             FROM backup_history
             WHERE status = ?
-            ORDER BY backup_start_time DESC, id DESC
+            ORDER BY started_at DESC, id DESC
             LIMIT 1
             """,
             (status.value,),
         ).fetchone()
         return _row_to_record(row) if row else None
 
-    def fetch_by_status(
-        self, status: BackupStatus, *, limit: Optional[int] = None
-    ) -> list[BackupHistoryRecord]:
+    def fetch_last_by_type(
+        self, backup_type: BackupType
+    ) -> Optional[BackupHistoryRecord]:
         conn = self._db.connect()
+        row = conn.execute(
+            f"""
+            SELECT {_SELECT_COLUMNS}
+            FROM backup_history
+            WHERE backup_type = ?
+            ORDER BY started_at DESC, id DESC
+            LIMIT 1
+            """,
+            (backup_type.value,),
+        ).fetchone()
+        return _row_to_record(row) if row else None
+
+    def fetch_last_for_area(self, area_id: int) -> Optional[BackupHistoryRecord]:
+        conn = self._db.connect()
+        row = conn.execute(
+            f"""
+            SELECT {_SELECT_COLUMNS}
+            FROM backup_history
+            WHERE area_id = ?
+            ORDER BY started_at DESC, id DESC
+            LIMIT 1
+            """,
+            (area_id,),
+        ).fetchone()
+        return _row_to_record(row) if row else None
+
+    def has_successful_automatic_today(
+        self, area_id: int, today_iso_prefix: str
+    ) -> bool:
+        """today_iso_prefix: '2026-08-14' (yerel gün; started_at UTC olabilir)."""
+        conn = self._db.connect()
+        row = conn.execute(
+            """
+            SELECT COUNT(*) AS c FROM backup_history
+            WHERE area_id = ?
+              AND backup_type = ?
+              AND status = ?
+              AND (
+                    started_at LIKE ? || '%'
+                 OR started_at LIKE ? || '%'
+              )
+            """,
+            (
+                area_id,
+                BackupType.AUTOMATIC.value,
+                BackupStatus.SUCCESS.value,
+                today_iso_prefix,
+                f"{today_iso_prefix}T",
+            ),
+        ).fetchone()
+        return bool(row and int(row["c"]) > 0)
+
+    def fetch_filtered(
+        self,
+        *,
+        area_id: Optional[int] = None,
+        backup_type: Optional[BackupType] = None,
+        status: Optional[BackupStatus] = None,
+        start: Optional[datetime] = None,
+        end: Optional[datetime] = None,
+        limit: int = 500,
+    ) -> list[BackupHistoryRecord]:
+        clauses: list[str] = []
+        params: list[Any] = []
+        if area_id is not None:
+            clauses.append("area_id = ?")
+            params.append(area_id)
+        if backup_type is not None:
+            clauses.append("backup_type = ?")
+            params.append(backup_type.value)
+        if status is not None:
+            clauses.append("status = ?")
+            params.append(status.value)
+        if start is not None:
+            clauses.append("started_at >= ?")
+            params.append(_to_iso(start))
+        if end is not None:
+            clauses.append("started_at <= ?")
+            params.append(_to_iso(end))
+        where = f"WHERE {' AND '.join(clauses)}" if clauses else ""
         sql = f"""
             SELECT {_SELECT_COLUMNS}
             FROM backup_history
-            WHERE status = ?
-            ORDER BY backup_start_time DESC, id DESC
+            {where}
+            ORDER BY started_at DESC, id DESC
+            LIMIT ?
         """
-        params: list[Any] = [status.value]
-        if limit is not None:
-            sql += " LIMIT ?"
-            params.append(max(1, int(limit)))
+        params.append(max(1, int(limit)))
+        conn = self._db.connect()
         rows = conn.execute(sql, params).fetchall()
         return [_row_to_record(row) for row in rows]
 
-    def fetch_by_date_range(
-        self,
-        start: datetime,
-        end: datetime,
-    ) -> list[BackupHistoryRecord]:
-        if end < start:
-            raise DatabaseError("Bitiş tarihi başlangıçtan önce olamaz.")
+    def fetch_today(self, today_iso_prefix: str) -> list[BackupHistoryRecord]:
         conn = self._db.connect()
         rows = conn.execute(
             f"""
             SELECT {_SELECT_COLUMNS}
             FROM backup_history
-            WHERE backup_start_time >= ?
-              AND backup_start_time <= ?
-            ORDER BY backup_start_time DESC, id DESC
+            WHERE started_at LIKE ? || '%'
+               OR started_at LIKE ? || '%'
+            ORDER BY started_at DESC, id DESC
             """,
-            (_to_iso(start), _to_iso(end)),
+            (today_iso_prefix, f"{today_iso_prefix}T"),
         ).fetchall()
         return [_row_to_record(row) for row in rows]
 

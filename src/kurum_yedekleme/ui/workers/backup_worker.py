@@ -1,55 +1,68 @@
-"""Arka plan yedekleme işçisi (QThread) — UI'yi bloke etmez."""
+"""Arka plan yedekleme işçisi (QThread)."""
 
 from __future__ import annotations
 
 import logging
+from typing import Sequence
 
 from PySide6.QtCore import QThread, Signal
 
+from kurum_yedekleme.core.lock import BackupInProgressError
 from kurum_yedekleme.core.progress import BackupProgressEvent
-from kurum_yedekleme.services.backup_service import (
-    BackupInProgressError,
-    BackupService,
-)
+from kurum_yedekleme.db.models import BackupArea, BackupType
+from kurum_yedekleme.services.backup_manager import BackupManager, JobResult
 
 logger = logging.getLogger(__name__)
 
 
 class BackupWorker(QThread):
-    """Yedekleme motorunu ayrı thread'de çalıştırır."""
-
-    progress = Signal(object)  # BackupProgressEvent
+    progress = Signal(object)
     finished_ok = Signal(str)
     finished_error = Signal(str)
 
     def __init__(
         self,
-        backup_service: BackupService,
+        backup_manager: BackupManager,
+        areas: Sequence[BackupArea],
         *,
-        trigger: str = "manual",
+        backup_type: BackupType = BackupType.MANUAL,
         parent=None,
     ) -> None:
         super().__init__(parent)
-        self._backup_service = backup_service
-        self._trigger = trigger
+        self._manager = backup_manager
+        self._areas = list(areas)
+        self._backup_type = backup_type
+
+    def cancel(self) -> None:
+        self._manager.request_cancel()
 
     def run(self) -> None:
         def emit_progress(event: BackupProgressEvent) -> None:
             self.progress.emit(event)
 
         try:
-            result = self._backup_service.run_backup(
-                trigger=self._trigger,
+            job: JobResult = self._manager.run(
+                self._areas,
+                backup_type=self._backup_type,
                 progress_emitter=emit_progress,
+                skip_successful_automatic_today=(
+                    self._backup_type == BackupType.AUTOMATIC
+                ),
             )
-            if result.success:
-                self.finished_ok.emit(result.format_report())
-            else:
-                # Anlaşılır hata mesajı
-                detail = result.transfer_message or result.message or result.status
-                self.finished_error.emit(
-                    f"Yedekleme tamamlanamadı.\n\n{detail}"
-                )
+            report = job.format_report()
+            if job.error and not job.results:
+                self.finished_error.emit(job.error)
+                return
+            if job.failed_count and job.success_count == 0 and not job.cancelled:
+                self.finished_error.emit(report)
+                return
+            if job.cancelled:
+                self.finished_error.emit(report)
+                return
+            if job.failed_count:
+                self.finished_error.emit(report)
+                return
+            self.finished_ok.emit(report)
         except BackupInProgressError as exc:
             self.finished_error.emit(str(exc))
         except Exception as exc:  # noqa: BLE001

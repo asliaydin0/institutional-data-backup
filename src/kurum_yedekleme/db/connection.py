@@ -14,6 +14,7 @@ logger = logging.getLogger(__name__)
 
 __all__ = ["Database", "DatabaseError"]
 
+
 class Database:
     """SQLite bağlantı yöneticisi — ilk açılışta otomatik oluşturur."""
 
@@ -23,7 +24,6 @@ class Database:
         self.schema_version: int = 0
 
     def connect(self) -> sqlite3.Connection:
-        """Bağlantıyı açar (dosya yoksa oluşturur)."""
         if self._connection is not None:
             return self._connection
 
@@ -34,10 +34,12 @@ class Database:
                 str(self.db_path),
                 detect_types=sqlite3.PARSE_DECLTYPES,
                 check_same_thread=False,
+                timeout=30.0,
             )
             conn.row_factory = sqlite3.Row
             conn.execute("PRAGMA foreign_keys = ON")
             conn.execute("PRAGMA journal_mode = WAL")
+            conn.execute("PRAGMA busy_timeout = 5000")
             self._connection = conn
             if created:
                 logger.info("Yeni SQLite veritabanı oluşturuldu: %s", self.db_path)
@@ -50,7 +52,6 @@ class Database:
             ) from exc
 
     def initialize(self) -> None:
-        """Migration'ları çalıştırarak şemayı hazırlar; bozuk DB'yi erken yakalar."""
         conn = self.connect()
         try:
             self._assert_integrity(conn)
@@ -67,7 +68,6 @@ class Database:
 
     @staticmethod
     def _assert_integrity(conn: sqlite3.Connection) -> None:
-        """PRAGMA quick_check — bozulmuş dosyada anlaşılır hata."""
         try:
             row = conn.execute("PRAGMA quick_check").fetchone()
         except sqlite3.Error as exc:
@@ -86,7 +86,6 @@ class Database:
             )
 
     def close(self) -> None:
-        """Bağlantıyı kapatır."""
         if self._connection is not None:
             self._connection.close()
             self._connection = None

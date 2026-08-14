@@ -1,80 +1,80 @@
-"""GUI'den bağımsız otomatik yedekleme zamanlayıcı servisi."""
+"""GUI'den bağımsız otomatik yedekleme zamanlayıcısı (Windows Service içinde)."""
 
 from __future__ import annotations
 
 import threading
 from dataclasses import dataclass
-from datetime import date, datetime, time
+from datetime import datetime, time, timedelta
 from typing import Callable, Optional
 
 from kurum_yedekleme.config.schema import ScheduleConfig
 from kurum_yedekleme.config.writer import validate_schedule_time
-from kurum_yedekleme.services.backup_service import (
-    BackupInProgressError,
-    BackupService,
-)
+from kurum_yedekleme.core.lock import BackupInProgressError
+from kurum_yedekleme.db.models import BackupArea, BackupType
+from kurum_yedekleme.services.area_service import AreaService
+from kurum_yedekleme.services.backup_manager import BackupManager, JobResult
 from kurum_yedekleme.services.history_service import HistoryService
-from kurum_yedekleme.services.schedule_state import ScheduleStateStore
 from kurum_yedekleme.utils.app_logger import get_logger
 
 logger = get_logger("BackupScheduler")
 
 Clock = Callable[[], datetime]
-BackupRunner = Callable[[], None]
 
 
 @dataclass(frozen=True)
 class MissedBackupInfo:
-    """Kaçırılmış günlük otomatik yedekleme bilgisi."""
-
     scheduled_time: str
-    today: date
-    message: str = (
-        "Bugünün otomatik yedeklemesi henüz yapılmamış. "
-        "Şimdi başlatmak ister misiniz?"
-    )
+    pending_area_count: int
+    message: str = "Bugünün otomatik yedeklemesi henüz yapılmadı."
 
 
 class ScheduleService:
     """
-    Günlük otomatik yedekleme zamanlayıcısı.
+    Günlük otomatik yedekleme.
 
-    GUI'den bağımsızdır; arka plan thread'i ile periyodik kontrol yapar.
+    Üretimde yalnızca Windows Service bu servisi start() eder; GUI
+    zamanlayıcı çalıştırmaz. TEST MODE GUI oturumunda pencere açıkken
+    start() edilir (servis kurulumu yoktur).
     """
 
     def __init__(
         self,
         schedule: ScheduleConfig,
-        backup_service: BackupService,
+        backup_manager: BackupManager,
+        area_service: AreaService,
+        history_service: HistoryService,
         *,
-        state_store: ScheduleStateStore,
-        history_service: Optional[HistoryService] = None,
         poll_interval_seconds: float = 20.0,
         clock: Optional[Clock] = None,
-        backup_runner: Optional[BackupRunner] = None,
     ) -> None:
         self._schedule = schedule
-        self._backup_service = backup_service
-        self._state = state_store
+        self._backups = backup_manager
+        self._areas = area_service
         self._history = history_service
         self._poll_interval = max(1.0, float(poll_interval_seconds))
         self._clock = clock or (lambda: datetime.now().astimezone())
-        self._backup_runner = backup_runner or self._default_run_auto_backup
-
         self._stop_event = threading.Event()
+        self._idle = threading.Event()
+        self._pending_missed_check = False
         self._thread: Optional[threading.Thread] = None
         self._lock = threading.RLock()
+        self._last_job: Optional[JobResult] = None
 
     @property
     def schedule(self) -> ScheduleConfig:
         with self._lock:
             return self._schedule
 
+    @property
+    def last_job(self) -> Optional[JobResult]:
+        return self._last_job
+
     def update_schedule(self, schedule: ScheduleConfig) -> None:
-        """Çalışma zamanında zamanlamayı günceller (ayarlar kaydından)."""
         validate_schedule_time(schedule.time)
         with self._lock:
             self._schedule = schedule
+            self._pending_missed_check = True
+        self._idle.set()
         logger.info(
             "Zamanlayıcı güncellendi: enabled=%s time=%s",
             schedule.enabled,
@@ -86,11 +86,11 @@ class ScheduleService:
         return self._thread is not None and self._thread.is_alive()
 
     def start(self) -> None:
-        """Arka plan zamanlayıcı thread'ini başlatır."""
         with self._lock:
             if self.is_running:
                 return
             self._stop_event.clear()
+            self._idle.clear()
             self._thread = threading.Thread(
                 target=self._loop,
                 name="BackupScheduleService",
@@ -105,8 +105,8 @@ class ScheduleService:
             )
 
     def stop(self, timeout: float = 5.0) -> None:
-        """Zamanlayıcıyı durdurur."""
         self._stop_event.set()
+        self._idle.set()
         thread = self._thread
         if thread is not None and thread.is_alive():
             thread.join(timeout=timeout)
@@ -114,12 +114,6 @@ class ScheduleService:
         logger.info("Zamanlayıcı durduruldu.")
 
     def tick(self, now: Optional[datetime] = None) -> bool:
-        """
-        Tek kontrol adımı (test / manuel tetik).
-
-        Returns:
-            Otomatik yedekleme başlatıldıysa True.
-        """
         moment = now or self._clock()
         if moment.tzinfo is None:
             moment = moment.astimezone()
@@ -129,36 +123,68 @@ class ScheduleService:
 
         if not schedule.enabled:
             return False
-
         if not self._is_scheduled_moment(moment, schedule.time):
             return False
+        return self.run_automatic_if_needed(now=moment)
 
-        if self._already_ran_today(moment.date()):
-            logger.debug(
-                "Bugün otomatik yedekleme zaten çalıştı (%s)", moment.date()
-            )
+    def check_missed_backup(
+        self, now: Optional[datetime] = None
+    ) -> Optional[MissedBackupInfo]:
+        moment = now or self._clock()
+        if moment.tzinfo is None:
+            moment = moment.astimezone()
+
+        with self._lock:
+            schedule = self._schedule
+        if not schedule.enabled:
+            return None
+
+        scheduled_today = datetime.combine(
+            moment.date(), self._parse_hhmm(schedule.time), tzinfo=moment.tzinfo
+        )
+        if moment < scheduled_today:
+            return None
+
+        pending = self._pending_automatic_areas()
+        if not pending:
+            return None
+        return MissedBackupInfo(
+            scheduled_time=schedule.time,
+            pending_area_count=len(pending),
+        )
+
+    def run_missed_if_needed(self, now: Optional[datetime] = None) -> bool:
+        info = self.check_missed_backup(now=now)
+        if info is None:
             return False
+        logger.info(
+            "Kaçırılmış otomatik yedek tespit edildi (%s alan). Başlatılıyor.",
+            info.pending_area_count,
+            operation="start",
+        )
+        return self.run_automatic_if_needed(now=now)
 
-        if self._backup_service.is_busy:
+    def run_automatic_if_needed(self, now: Optional[datetime] = None) -> bool:
+        pending = self._pending_automatic_areas()
+        if not pending:
+            logger.debug("Otomatik yedek: bekleyen alan yok.")
+            return False
+        if self._backups.is_busy:
             logger.info(
                 "Zamanı geldi ancak başka bir yedekleme sürüyor; atlanıyor."
             )
             return False
-
         logger.info(
-            "Yedekleme başlatıldı",
+            "Otomatik yedekleme başlıyor (%s alan)",
+            len(pending),
             operation="start",
         )
-        logger.info(
-            "Otomatik yedekleme tetikleniyor (%s %s)",
-            moment.date(),
-            schedule.time,
-            operation="start",
-        )
-        # Günü işaretle — aynı gün ikinci otomatik başlamasın
-        self._state.set_last_auto_run_date(moment.date())
         try:
-            self._backup_runner()
+            self._last_job = self._backups.run(
+                pending,
+                backup_type=BackupType.AUTOMATIC,
+                skip_successful_automatic_today=True,
+            )
         except BackupInProgressError:
             logger.warning("Otomatik yedekleme: eşzamanlı iş engellendi.")
             return False
@@ -167,55 +193,7 @@ class ScheduleService:
             return False
         return True
 
-    def check_missed_backup(
-        self, now: Optional[datetime] = None
-    ) -> Optional[MissedBackupInfo]:
-        """
-        Bilgisayar planlanan saatte kapalıysa / uygulama geç açıldıysa
-        kaçırılmış günlük yedeği tespit eder.
-        """
-        moment = now or self._clock()
-        if moment.tzinfo is None:
-            moment = moment.astimezone()
-
-        with self._lock:
-            schedule = self._schedule
-
-        if not schedule.enabled:
-            return None
-
-        today = moment.date()
-        scheduled_today = datetime.combine(
-            today, self._parse_hhmm(schedule.time), tzinfo=moment.tzinfo
-        )
-        if moment < scheduled_today:
-            return None
-
-        if self._already_ran_today(today):
-            return None
-
-        # Son başarılı yedekleme bugün mü?
-        if self._history is not None:
-            last_ok = self._history.get_last_successful()
-            if last_ok is not None:
-                last_local = last_ok.backup_start_time.astimezone(moment.tzinfo)
-                if last_local.date() == today:
-                    return None
-
-        # Aynı oturum/gün içinde bir kez sor
-        prompted = self._state.get_missed_prompt_date()
-        if prompted == today:
-            return None
-
-        return MissedBackupInfo(scheduled_time=schedule.time, today=today)
-
-    def acknowledge_missed_prompt(self, today: Optional[date] = None) -> None:
-        """Kaçırılmış yedek sorusunun gösterildiğini işaretler."""
-        day = today or self._clock().date()
-        self._state.set_missed_prompt_date(day)
-
     def next_run_at(self, now: Optional[datetime] = None) -> Optional[datetime]:
-        """Bir sonraki planlanan otomatik yedekleme zamanı (yerel)."""
         moment = now or self._clock()
         if moment.tzinfo is None:
             moment = moment.astimezone()
@@ -225,38 +203,45 @@ class ScheduleService:
             return None
         target = self._parse_hhmm(schedule.time)
         today_run = datetime.combine(moment.date(), target, tzinfo=moment.tzinfo)
-        if moment < today_run and not self._already_ran_today(moment.date()):
+        if moment < today_run:
             return today_run
-        from datetime import timedelta
-
         tomorrow = moment.date() + timedelta(days=1)
         return datetime.combine(tomorrow, target, tzinfo=moment.tzinfo)
 
-    def mark_auto_run_for_today(self, today: Optional[date] = None) -> None:
-        """Bugün otomatik yedeklemenin başlatıldığını kalıcı olarak işaretler."""
-        day = today or self._clock().date()
-        self._state.set_last_auto_run_date(day)
-        self._state.set_missed_prompt_date(day)
+    def _pending_automatic_areas(self) -> list[BackupArea]:
+        pending: list[BackupArea] = []
+        for area in self._areas.list_enabled():
+            if area.id is None:
+                pending.append(area)
+                continue
+            if not self._history.has_successful_automatic_today(area.id):
+                pending.append(area)
+        return pending
 
-    def run_missed_backup_now(self) -> None:
-        """Kullanıcı onayı sonrası kaçırılmış yedeği başlatır."""
-        self.mark_auto_run_for_today()
-        self._backup_runner()
-
-    def _default_run_auto_backup(self) -> None:
-        self._backup_service.run_backup(trigger="schedule")
+    def _consume_missed_check(self) -> bool:
+        with self._lock:
+            pending = self._pending_missed_check
+            self._pending_missed_check = False
+            return pending
 
     def _loop(self) -> None:
+        # Servis / TEST MODE oturum açılışında kaçırılmış yedek
+        try:
+            self.run_missed_if_needed()
+        except Exception:
+            logger.exception("Açılış missed-backup kontrolü hatası")
         while not self._stop_event.is_set():
+            if self._consume_missed_check():
+                try:
+                    self.run_missed_if_needed()
+                except Exception:
+                    logger.exception("Ayar sonrası missed-backup kontrolü hatası")
             try:
                 self.tick()
             except Exception:
                 logger.exception("Zamanlayıcı tick hatası")
-            self._stop_event.wait(self._poll_interval)
-
-    def _already_ran_today(self, today: date) -> bool:
-        last = self._state.get_last_auto_run_date()
-        return last == today
+            self._idle.wait(self._poll_interval)
+            self._idle.clear()
 
     @staticmethod
     def _parse_hhmm(value: str) -> time:
@@ -265,6 +250,5 @@ class ScheduleService:
 
     @staticmethod
     def _is_scheduled_moment(moment: datetime, schedule_time: str) -> bool:
-        """Belirlenen HH:MM dakikası içinde mi?"""
         target = ScheduleService._parse_hhmm(schedule_time)
         return moment.hour == target.hour and moment.minute == target.minute

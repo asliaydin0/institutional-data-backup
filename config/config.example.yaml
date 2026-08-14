@@ -3,62 +3,28 @@ app:
   language: "tr"
   data_dir: "./data"
   log_dir: "./logs"
-  # Geçici ZIP klasörü — yeterli boş alanı olan yerel disk
-  temp_dir: "./temp"
 
-sources:
-  # PLACEHOLDER: gerçek kurum kaynağı ile değiştirin
-  - id: "kaynak_1"
-    path: "C:/YOL/KAYNAK_KLASORU"
-    enabled: true
-
-destination:
-  # PLACEHOLDER: gerçek UNC paylaşımı ile değiştirin
-  unc_path: "\\\\SUNUCU\\Paylasim\\Yedekler"
-  filename_pattern: "Yedek_{date}_{time}.zip"
-  create_subdirs_by_date: true
+# Tüm yedekler yalnızca E: diskinde tutulur
+backup_root: "E:\\Yedekler"
 
 schedule:
-  # false = yalnızca elle yedekleme; true = belirlenen saatte otomatik
-  enabled: false
+  enabled: true
   time: "02:00"
-  days: ["mon", "tue", "wed", "thu", "fri", "sat", "sun"]
+
+retry:
+  max_attempts: 3
+  initial_delay_seconds: 10
+  backoff_multiplier: 2
 
 zip:
-  compression: "deflated"
   compresslevel: 6
   exclude_patterns:
     - "*.tmp"
     - "~$*"
     - "Thumbs.db"
 
-integrity:
-  algorithm: "sha256"
-  verify_after_transfer: true
-
-retry:
-  max_attempts: 3
-  initial_delay_seconds: 1
-  backoff_multiplier: 2
-  retry_on:
-    - "network"
-    - "io"
-    - "timeout"
-
 logging:
   level: "INFO"
-  # size = dosya boyutuna göre | daily = her gece yarısı
   rotation: "size"
   max_bytes: 5242880
-  # Eski log dosyası üst sınırı (sınırsız büyüme engeli, max 30)
   backup_count: 10
-
-security:
-  # Parola yazmayın — yalnızca Credential Manager hedef adı (opsiyonel)
-  credential_target: null
-  read_only_sources: true
-
-autostart:
-  # Windows Task Scheduler (ONLOGON, kullanıcı oturumu) — admin gerekmez
-  # Registry Run anahtarı kullanılmaz
-  enabled: false

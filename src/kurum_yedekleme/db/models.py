@@ -24,9 +24,53 @@ class BackupStatus(str, Enum):
         except ValueError as exc:
             raise ValueError(f"Geçersiz yedekleme durumu: {value}") from exc
 
+    @property
+    def label_tr(self) -> str:
+        return {
+            BackupStatus.RUNNING: "Çalışıyor",
+            BackupStatus.SUCCESS: "Başarılı",
+            BackupStatus.FAILED: "Başarısız",
+            BackupStatus.CANCELLED: "İptal",
+        }[self]
 
-TRIGGER_MANUAL = "manual"
-TRIGGER_SCHEDULE = "schedule"
+
+class BackupType(str, Enum):
+    """Yedeklemenin nasıl tetiklendiği."""
+
+    MANUAL = "MANUAL"
+    AUTOMATIC = "AUTOMATIC"
+
+    @classmethod
+    def parse(cls, value: str) -> BackupType:
+        normalized = str(value).strip().upper()
+        try:
+            return cls(normalized)
+        except ValueError as exc:
+            raise ValueError(f"Geçersiz yedekleme türü: {value}") from exc
+
+    @property
+    def label_tr(self) -> str:
+        return {
+            BackupType.MANUAL: "Manuel",
+            BackupType.AUTOMATIC: "Otomatik",
+        }[self]
+
+
+@dataclass(frozen=True)
+class BackupArea:
+    """backup_areas satırı."""
+
+    id: Optional[int]
+    name: str
+    source_path: str
+    enabled: bool
+    deleted: bool
+    created_at: datetime
+    updated_at: datetime
+
+    @property
+    def is_active(self) -> bool:
+        return self.enabled and not self.deleted
 
 
 @dataclass(frozen=True)
@@ -34,18 +78,17 @@ class BackupHistoryRecord:
     """backup_history satırı (UI/servis DTO)."""
 
     id: Optional[int]
-    backup_start_time: datetime
-    backup_end_time: Optional[datetime]
-    source_path: str
-    destination_path: Optional[str]
+    area_id: Optional[int]
+    area_name: str
+    backup_type: BackupType
+    started_at: datetime
+    completed_at: Optional[datetime]
+    duration_seconds: Optional[float]
+    backup_file: Optional[str]
+    file_size: int
     file_count: int
-    original_size: int
-    compressed_size: int
-    compression_ratio: float
-    sha256: Optional[str]
     status: BackupStatus
     error_message: Optional[str]
-    retry_count: int
 
     @property
     def is_success(self) -> bool:

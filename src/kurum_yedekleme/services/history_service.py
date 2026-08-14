@@ -3,73 +3,59 @@
 from __future__ import annotations
 
 import logging
-from datetime import datetime
+from datetime import datetime, time, timedelta
 from typing import Optional
 
-from kurum_yedekleme.core.backup_engine import BackupResult
+from kurum_yedekleme.core.backup_engine import AreaBackupResult
 from kurum_yedekleme.db.history_repository import HistoryRepository
-from kurum_yedekleme.db.models import BackupHistoryRecord, BackupStatus
+from kurum_yedekleme.db.models import (
+    BackupHistoryRecord,
+    BackupStatus,
+    BackupType,
+)
 
 logger = logging.getLogger(__name__)
 
 
 class HistoryService:
-    """
-    Yedekleme geçmişi iş kuralları.
-
-    UI katmanı SQLite sorgusu çalıştırmaz; bu servisi kullanır.
-    """
-
     def __init__(self, repository: HistoryRepository) -> None:
         self._repo = repository
 
     def start_run(
         self,
         *,
-        source_path: str,
-        destination_path: Optional[str] = None,
+        area_id: Optional[int],
+        area_name: str,
+        backup_type: BackupType,
         start_time: Optional[datetime] = None,
     ) -> int:
-        """Yedekleme başlangıcını RUNNING olarak kaydeder."""
-        record_id = self._repo.insert_running(
-            source_path=source_path,
-            destination_path=destination_path,
+        return self._repo.insert_running(
+            area_id=area_id,
+            area_name=area_name,
+            backup_type=backup_type,
             start_time=start_time,
         )
-        logger.info("Geçmiş: RUNNING id=%s kaynak=%s", record_id, source_path)
-        return record_id
 
     def complete_from_result(
         self,
         record_id: int,
-        result: BackupResult,
+        result: AreaBackupResult,
     ) -> BackupHistoryRecord:
-        """BackupResult'a göre kaydı SUCCESS veya FAILED yapar."""
-        status = BackupStatus.SUCCESS if result.success else BackupStatus.FAILED
-        destination = None
-        if result.remote_path is not None:
-            destination = str(result.remote_path)
-        elif result.zip_path is not None:
-            destination = str(result.zip_path)
-
         error_message = None
         if not result.success:
-            error_message = result.transfer_message or result.message or "Başarısız"
+            error_message = result.message or "Başarısız"
         elif result.error_files:
             error_message = f"{len(result.error_files)} dosyada uyarı"
 
         self._repo.update_finished(
             record_id,
-            status=status,
+            status=result.status,
             end_time=result.finished_at,
-            destination_path=destination,
+            backup_file=str(result.zip_path) if result.zip_path else None,
+            file_size=result.zip_size,
             file_count=result.file_count,
-            original_size=result.original_size,
-            compressed_size=result.zip_size,
-            compression_ratio=float(result.compression_ratio_percent),
-            sha256=result.local_sha256 or result.remote_sha256,
             error_message=error_message,
-            retry_count=int(result.transfer_attempts or 0),
+            duration_seconds=result.duration_seconds,
         )
         record = self._repo.get_by_id(record_id)
         if record is None:
@@ -82,15 +68,12 @@ class HistoryService:
         *,
         error_message: str,
         end_time: Optional[datetime] = None,
-        retry_count: int = 0,
     ) -> None:
-        """Beklenmeyen hata durumunda FAILED işaretler."""
         self._repo.update_finished(
             record_id,
             status=BackupStatus.FAILED,
             end_time=end_time,
             error_message=error_message,
-            retry_count=retry_count,
         )
 
     def mark_cancelled(
@@ -108,37 +91,81 @@ class HistoryService:
         )
 
     def get_last_successful(self) -> Optional[BackupHistoryRecord]:
-        """Son başarılı yedekleme."""
         return self._repo.fetch_last_by_status(BackupStatus.SUCCESS)
 
     def get_last_backup(self) -> Optional[BackupHistoryRecord]:
-        """Son yedekleme (durumdan bağımsız)."""
         return self._repo.fetch_last()
 
     def get_last_n(self, limit: int = 10) -> list[BackupHistoryRecord]:
-        """Son N yedekleme (varsayılan 10)."""
         return self._repo.fetch_recent(limit=limit)
+
+    def get_last_by_type(
+        self, backup_type: BackupType
+    ) -> Optional[BackupHistoryRecord]:
+        return self._repo.fetch_last_by_type(backup_type)
+
+    def get_last_for_area(self, area_id: int) -> Optional[BackupHistoryRecord]:
+        return self._repo.fetch_last_for_area(area_id)
 
     def get_failed_backups(
         self, *, limit: Optional[int] = None
     ) -> list[BackupHistoryRecord]:
-        """Başarısız yedeklemeler."""
-        return self._repo.fetch_by_status(BackupStatus.FAILED, limit=limit)
+        return self._repo.fetch_filtered(
+            status=BackupStatus.FAILED, limit=limit or 50
+        )
 
-    def get_backups_in_range(
-        self, start: datetime, end: datetime
+    def filter(
+        self,
+        *,
+        area_id: Optional[int] = None,
+        backup_type: Optional[BackupType] = None,
+        status: Optional[BackupStatus] = None,
+        start: Optional[datetime] = None,
+        end: Optional[datetime] = None,
+        limit: int = 500,
     ) -> list[BackupHistoryRecord]:
-        """Belirli tarih aralığındaki yedeklemeler."""
-        return self._repo.fetch_by_date_range(start, end)
+        return self._repo.fetch_filtered(
+            area_id=area_id,
+            backup_type=backup_type,
+            status=status,
+            start=start,
+            end=end,
+            limit=limit,
+        )
 
     def count_successful(self) -> int:
-        """Toplam başarılı yedekleme sayısı."""
         return self._repo.count_by_status(BackupStatus.SUCCESS)
 
     def count_all(self) -> int:
-        """Toplam kayıt sayısı."""
         return self._repo.count_all()
 
-    # Geriye dönük uyumluluk
-    def get_run_count(self) -> int:
-        return self.count_all()
+    def has_successful_automatic_today(
+        self, area_id: int, *, now: Optional[datetime] = None
+    ) -> bool:
+        start, end = local_day_bounds_utc(now)
+        rows = self._repo.fetch_filtered(
+            area_id=area_id,
+            backup_type=BackupType.AUTOMATIC,
+            status=BackupStatus.SUCCESS,
+            start=start,
+            end=end,
+            limit=1,
+        )
+        return bool(rows)
+
+    def today_records(
+        self, *, now: Optional[datetime] = None
+    ) -> list[BackupHistoryRecord]:
+        start, end = local_day_bounds_utc(now)
+        return self._repo.fetch_filtered(start=start, end=end, limit=1000)
+
+
+def local_day_bounds_utc(
+    now: Optional[datetime] = None,
+) -> tuple[datetime, datetime]:
+    moment = now or datetime.now().astimezone()
+    if moment.tzinfo is None:
+        moment = moment.astimezone()
+    start_local = datetime.combine(moment.date(), time.min, tzinfo=moment.tzinfo)
+    end_local = start_local + timedelta(days=1) - timedelta(seconds=1)
+    return start_local.astimezone(), end_local.astimezone()

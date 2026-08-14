@@ -1,25 +1,26 @@
 # Kurum Yedekleme
 
-Kurum klasörlerini ZIP olarak yedekleyip Windows UNC paylaşımına aktaran masaüstü uygulaması (PySide6, Türkçe).
+Kurum birimlerinin klasörlerini ZIP olarak **yalnızca `E:\Yedekler`** altına yedekleyen Windows masaüstü uygulaması (PySide6, Türkçe).
 
-**Durum:** Özellikler tamam; production öncesi yapılandırma ve kontrol listesi zorunludur. Bu depoda gerçek kurum verisi üzerinde işlem yapılmaz.
+Otomatik yedekleme **Windows Service** ile çalışır. GUI kapalı olsa ve kullanıcı oturum açmamış olsa bile servis yedek alabilir.
 
-## Çalışan özellikler
+**Durum:** v1.0.0 — alan tabanlı yedekleme. Bu depoda gerçek kurum verisi üzerinde işlem yapılmaz.
 
-- Kaynak tarama → streaming ZIP → SHA-256 → UNC aktarım (`.tmp` → doğrula → rename)
-- Manuel ve zamanlanmış yedekleme; kaçırılmış yedek uyarısı
-- SQLite geçmiş (SUCCESS / FAILED / CANCELLED)
-- System tray, arka plan, Windows Task Scheduler ile oturum açılışı
-- Kurumsal log (rotasyon + hassas alan maskeleme)
-- Güvenli TEST MODE (`tests/test_data` + `test_server`)
-- Windows EXE (`build.bat` → `dist\KurumYedekleme\KurumYedekleme.exe`)
+## Ne yapar?
+
+- Birden fazla **yedekleme alanı** (birim/klasör): Helal Akreditasyon, Personel, Destek Hizmetleri, …
+- Her alan `E:\Yedekler\<Alan>\<YYYY-MM-DD>\<Alan>.zip` yoluna yazılır
+- Manuel seçimli yedek ve günlük otomatik yedek
+- SQLite geçmişi: alan, manuel/otomatik, durum, boyut, süre
+- Kaynak dosyalar yalnızca okunur; silinmez / değiştirilmez
+- Yarım ZIP yalnızca `.tmp` adında kalır; başarılı olunca `.zip` olur
 
 ## Gereksinimler
 
 | Ortam | Gereksinim |
 |-------|------------|
-| Son kullanıcı (EXE) | Windows 10/11 — **Python gerekmez** |
-| Geliştirme | Python 3.11+ (3.13 test edildi), ~100+ MB disk |
+| Son kullanıcı (EXE) | Windows 10/11, **E:** diski — Python gerekmez |
+| Geliştirme | Python 3.11+ , ~100+ MB disk |
 
 ## Kurulum (geliştirme)
 
@@ -27,65 +28,136 @@ Kurum klasörlerini ZIP olarak yedekleyip Windows UNC paylaşımına aktaran mas
 cd <proje-kökü>
 .\scripts\create_venv.ps1
 .\.venv\Scripts\Activate.ps1
+$env:PYTHONPATH = "src"
 ```
 
 ## Yapılandırma
 
-1. `config/config.example.yaml` içindeki **PLACEHOLDER** yolları inceleyin.
-2. İlk çalıştırmada `config/config.yaml` örnekten oluşur (`config.yaml` git’e eklenmez).
-3. Gerçek kaynak / UNC / `temp_dir` yollarını yalnızca `config.yaml` içine yazın.
-4. **Parola yazmayın** — `security.credential_target` yalnızca Credential Manager adı olabilir.
+1. `config/config.example.yaml` dosyasını inceleyin.
+2. İlk çalıştırmada `config/config.yaml` örnekten oluşur (git’e eklenmez).
+3. `backup_root` production’da `E:\Yedekler` olmalıdır.
+4. Yedekleme **alanları YAML’da değil**, SQLite’dadır (`data/kurum_yedekleme.db`).
+5. Parola yazmayın.
 
 ## Çalıştırma
 
 ```powershell
 $env:PYTHONPATH = "src"
-python -m kurum_yedekleme
-python -m kurum_yedekleme --tray
+python -m kurum_yedekleme              # GUI
+python -m kurum_yedekleme --tray       # GUI gizli, tray
+python -m kurum_yedekleme --run-service
 ```
 
-## Windows EXE
+`--run-service` zamanlayıcıyı GUI olmadan çalıştırır (hizmet hata ayıklama). Production’da Windows Service kullanın.
+
+## Windows Service
+
+Otomatik yedekleme GUI’den bağımsızdır.
+
+Yönetici PowerShell:
 
 ```powershell
-.\build.bat                 # release — konsol yok
-.\build_debug.bat           # debug — konsol açık
-.\scripts\verify_exe.bat
+.\scripts\install_service.ps1
 ```
 
-Temiz PC: `dist\KurumYedekleme\` klasörünün **tamamını** kopyalayın.
-
-## Windows açılışında otomatik başlatma
-
-Ayarlar → **Windows açılışında otomatik başlat** → Kaydet.
-
-- Yalnızca Task Scheduler görevi: `KurumYedekleme\OtomatikBaslat` (`ONLOGON`, `/RL LIMITED`)
-- Registry `Run` **kullanılmaz**; admin gerekmez
+veya:
 
 ```powershell
-schtasks /Query /TN "KurumYedekleme\OtomatikBaslat" /FO LIST /V
+python -m kurum_yedekleme --install-service
+python -m kurum_yedekleme --uninstall-service
+sc start KurumYedekleme
+sc stop KurumYedekleme
+sc query KurumYedekleme
 ```
+
+- Hizmet adı: `KurumYedekleme`
+- Başlangıç: otomatik (`auto`)
+- Kullanıcı oturumu gerekmez (LocalSystem). Kaynak bir ağ paylaşımıysa (`\\DosyaSunucusu\...`) bilgisayar hesabının okuma izni olmalıdır; gerekirse hizmeti yetkili bir domain hesabıyla çalıştırın.
+
+GUI → Ayarlar’dan da servis kurulumu / başlatma / durdurma yapılabilir.
+
+## GUI kullanımı
+
+| Ekran | İş |
+|-------|-----|
+| Dashboard | Servis durumu, bugünkü yedek, son otomatik/manuel, kaçırılmış yedek uyarısı |
+| Yedekleme Alanları | Yeni alan, düzenle, aktif/pasif, sil (soft), ortak alanı tara |
+| Yedekleme | Alan seç, tam yedek, iptal |
+| Geçmiş | Alan / tür / durum / tarih filtresi |
+| Ayarlar | Saat, retry, servis |
+| Loglar | Dönen log dosyası |
+
+### Yeni alan
+
+Yedekleme Alanları → **+ Yeni Alan Ekle**
+
+- Alan adı (benzersiz)
+- Kaynak klasör (erişilebilir ve okunabilir olmalı)
+- Aktif / Pasif
+
+### Ortak alanı tara
+
+`\\DosyaSunucusu\OrtakAlan\` gibi bir kök seçin. Alt klasörler listelenir; istediğinizi alan olarak ekleyin. Elle alan ekleme her zaman durur.
+
+### Alan silme
+
+Onay: *Bu alan uygulamadan kaldırılacak. Mevcut yedekler ve geçmiş kayıtları silinmeyecektir.*
+
+Fiziksel ZIP’ler ve geçmiş satırları kalır (soft delete).
+
+### Manuel yedek
+
+Yedekleme ekranında alanları işaretleyin → **Seçili Alanları Yedekle**. **Tam Yedekleme** tüm aktif alanları seçer. Kayıt türü: `MANUAL`.
+
+Aynı gün ikinci manuel yedek: `Personel.zip`, `Personel_2.zip`, … (üzerine yazılmaz).
+
+### Otomatik yedek
+
+Ayarlar’da saat (ör. 02:00) ve servisin çalışıyor olması. Tüm aktif alanlar yedeklenir. Tür: `AUTOMATIC`.
+
+Aynı gün o alan için başarılı otomatik yedek varsa tekrar çalışmaz.
+
+Bilgisayar 02:00’da kapalıysa servis açılışında *bugünün otomatik yedeklemesi henüz yapılmadı* tespit edilir ve eksik alanlar yedeklenir.
+
+## Yedek klasör yapısı
+
+```
+E:\Yedekler\
+├── Helal Akreditasyon\
+│   └── 2026-08-14\
+│       └── Helal Akreditasyon.zip
+└── Personel\
+    └── 2026-08-14\
+        ├── Personel.zip
+        └── Personel_2.zip      # ikinci manuel
+```
+
+ZIP yazılırken aynı klasörde `.Personel.tmp` kullanılır; başarıda `Personel.zip` olur.
 
 ## TEST MODE
 
-Gerçek kurum / UNC yollarına **dokunmaz**. Production’da `--test-mode` veya `KURUM_YEDEKLEME_TEST_MODE` kullanmayın.
+Gerçek kurum kaynaklarına ve `E:\Yedekler` üretim klasörüne **dokunmaz**.
 
 ```powershell
-python -m kurum_yedekleme --run-test-backup   # → TEST_MODE_OK
 python -m kurum_yedekleme --test-mode
+python -m kurum_yedekleme --run-test-backup
 ```
+
+GUI’de kırmızı **⚠ TEST MODU AKTİF** bandı görünür. Production’da `--test-mode` ve `KURUM_YEDEKLEME_TEST_MODE` kullanmayın.
 
 ## Loglar
 
 Klasör: `logs/` — biçim: `Tarih Saat SEVİYE Modül İşlem - Mesaj`  
 Rotasyon: `size` veya `daily`; `backup_count` ≤ 30.  
-Parola / token logda `***` olur.
+Parola / token logda `***` olur. Kaynak dosya içerikleri loglanmaz.
 
-## Güvenlik ilkeleri
+## Güvenlik
 
-- Kaynaklar salt okunur (`rb`); silinmez / değiştirilmez
-- Sunucuda yarım dosya yalnızca `.tmp`; hash sonrası nihai ada rename
-- Tek yedekleme kilidi (`BackupInProgressError`)
-- Hassas değerler config’e yazılmaz
+- Kaynaklar salt okunur (`rb`)
+- Yarım dosya yalnızca `.tmp`
+- Tek yedekleme kilidi (GUI + servis aynı kilit dosyası)
+- Başarısız iş SUCCESS yazılmaz
+- Config’de parola yok
 
 ## Testler
 
@@ -96,34 +168,45 @@ $env:KURUM_YEDEKLEME_NO_TRAY = "1"
 python -m pytest tests -q
 ```
 
-Son koşu: **91 passed, 1 skipped** (UNC entegrasyon isteğe bağlı).
+Gerçek kurum klasörleri ve gerçek `E:\Yedekler` kullanılmaz; testler geçici dizin kullanır.
 
-## İlk gerçek yedekleme öncesi kontrol listesi
+## Windows EXE
 
-1. [ ] `config.yaml` PLACEHOLDER değil — gerçek kaynak / UNC / temp doğrulandı
-2. [ ] Temp ve hedefte yedek boyutundan fazla boş disk var
-3. [ ] UNC paylaşımına yazma izni test edildi (küçük deneme klasörü)
-4. [ ] `KURUM_YEDEKLEME_TEST_MODE` ortam değişkeni **yok**
-5. [ ] Uygulama `--test-mode` olmadan açılıyor
-6. [ ] Zamanlama saati / günleri kurum politikasına uygun
-7. [ ] İlk yedek **küçük test kaynağı** ile (üretim verisinin kopyası veya dar kapsam)
-8. [ ] Geçmiş’te SUCCESS + logda SHA-256 + hedefte nihai `.zip` (`.tmp` yok)
-9. [ ] Kaynak klasörde dosya sayısı/boyut değişmediği doğrulandı
-10. [ ] Otomatik başlatma gerekiyorsa Ayarlar’dan açıldı; `schtasks` ile kontrol edildi
-11. [ ] Antivirüs EXE klasörünü engellemiyor
-12. [ ] Sorumlu kişi / geri alma planı (bozuk SQLite → DB dosyasını yeniden adlandır)
+```powershell
+.\build.bat
+.\scripts\verify_exe.bat
+```
 
-Ayrıntılı denetim: [docs/PRODUCTION_READINESS.md](docs/PRODUCTION_READINESS.md)
+Temiz PC: `dist\KurumYedekleme\` klasörünün **tamamını** kopyalayın. Servis kurulumu için Ayarlar veya `install_service.ps1`.
 
-## Geliştirme durumu
+## Production kontrol listesi
 
-| Bileşen | Durum |
-|---------|--------|
-| ZIP + UNC + SHA-256 | Hazır |
-| SQLite geçmiş | Hazır |
-| Zamanlayıcı + tray + autostart | Hazır |
-| Log + TEST MODE + EXE | Hazır |
-| Production yapılandırma | Operasyon ekibi — kontrol listesi |
+1. [ ] `E:` diski var; `E:\Yedekler` yazılabilir
+2. [ ] Alanlar GUI’den eklendi; kaynaklar okunabiliyor
+3. [ ] TEST MODE kapalı
+4. [ ] Windows Service kurulu ve **Çalışıyor** (`sc query KurumYedekleme`)
+5. [ ] Zamanlama saati kurum politikasına uygun
+6. [ ] Küçük deneme manuel yedek SUCCESS
+7. [ ] Hedefte `.tmp` yok, tarih klasöründe `.zip` var
+8. [ ] Kaynak klasör değişmedi
+9. [ ] Ağ kaynağı kullanılıyorsa servis hesabının okuma izni var
+
+Ayrıntı: [docs/PRODUCTION_READINESS.md](docs/PRODUCTION_READINESS.md)
+
+## Mimari
+
+```
+Windows
+  → Windows Service (KurumYedekleme)
+       → Scheduler
+            → Backup Manager
+                 → aktif alanlar
+                      → E:\Yedekler\<Alan>\<tarih>\<Alan>.zip
+  → GUI (isteğe bağlı)
+       → alan yönetimi, manuel yedek, geçmiş, servis durumu
+```
+
+GUI zamanlayıcı çalıştırmaz. Aynı yedek işi GUI ve servisten aynı anda başlatılamaz.
 
 ## Lisans
 

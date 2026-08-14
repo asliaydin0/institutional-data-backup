@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Callable, Optional
+from typing import Callable
 
 
 @dataclass(frozen=True)
@@ -18,6 +18,7 @@ class BackupProgressEvent:
     elapsed_seconds: float = 0.0
     zip_bytes: int = 0
     current_path: str = ""
+    area_name: str = ""
 
     @property
     def stage_label(self) -> str:
@@ -25,9 +26,8 @@ class BackupProgressEvent:
             "basladi": "Başlatılıyor",
             "tarama": "Dosyalar taranıyor",
             "zip": "ZIP oluşturuluyor",
-            "aktarim": "Sunucuya aktarılıyor",
-            "dogrulama": "Bütünlük doğrulanıyor",
             "tamamlandi": "Tamamlandı",
+            "iptal": "İptal edildi",
             "hata": "Hata",
         }
         return mapping.get(self.stage, self.stage)

@@ -8,27 +8,37 @@ __pycache__/
 venv/
 env/
 ENV/
+.env
 
-# Dağıtım / paketleme
+# Dağıtım / Build
 build/
 dist/
 *.egg-info/
 .eggs/
+*.spec
 *.spec.bak
 packaging/__pycache__/
 
-# Uygulama çalışma verileri
+# Uygulama Konfigürasyonu ve Çalışma Verileri
 config/config.yaml
-data/*.db
-data/*.db-*
-logs/*.log
-logs/*.log.*
+config/*.local.yaml
 temp/**
 !temp/.gitkeep
+
+# Veritabanı
+*.db
+*.sqlite
+*.sqlite3
+data/*.db-*
 !data/.gitkeep
+
+# Loglar
+logs/
+*.log
+logs/*.log.*
 !logs/.gitkeep
 
-# IDE / OS
+# IDE / İşletim Sistemi (OS)
 .idea/
 .vscode/
 *.swp
@@ -36,16 +46,20 @@ temp/**
 Thumbs.db
 desktop.ini
 
-# Test / coverage
+# Test / Coverage
 .pytest_cache/
 .coverage
 htmlcov/
 .mypy_cache/
 .ruff_cache/
 
-# TEST MODE üretilen veriler (kaynak şablonları script ile oluşur)
+# Test Modu Üretilen Veriler (Kaynak şablonları script ile oluşur)
 tests/test_data/**
 !tests/test_data/.gitkeep
 !tests/test_data/README.md
 test_server/**
 !test_server/.gitkeep
+
+# Geçici / Yedek Dosyalar
+*.tmp
+*.partial

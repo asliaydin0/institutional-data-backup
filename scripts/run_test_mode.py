@@ -1,8 +1,7 @@
 """
 TEST MODE — headless tam yedekleme akışı.
 
-Yalnızca tests/test_data ve test_server kullanır.
-Gerçek kurum verilerine / UNC sunucusuna dokunmaz.
+Yalnızca tests/test_data kullanır. Gerçek kurum verilerine dokunmaz.
 """
 
 from __future__ import annotations
