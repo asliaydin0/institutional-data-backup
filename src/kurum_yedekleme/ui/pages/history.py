@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from PySide6.QtCore import QDate
+from PySide6.QtCore import QDate, Qt
 from PySide6.QtWidgets import (
     QAbstractItemView,
     QComboBox,
@@ -12,6 +12,7 @@ from PySide6.QtWidgets import (
     QHBoxLayout,
     QHeaderView,
     QLabel,
+    QMessageBox,
     QPushButton,
     QTableWidget,
     QTableWidgetItem,
@@ -22,6 +23,7 @@ from PySide6.QtWidgets import (
 from kurum_yedekleme.db.models import BackupArea, BackupStatus, BackupType
 from kurum_yedekleme.services.history_service import HistoryService
 from kurum_yedekleme.utils.formatting import format_bytes
+from kurum_yedekleme.utils.windows_paths import reveal_in_file_manager
 
 
 def _duration_text(seconds: float | None) -> str:
@@ -96,6 +98,10 @@ class HistoryPage(QWidget):
         self._table.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
         self._table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
         self._table.verticalHeader().setVisible(False)
+        self._table.setToolTip(
+            "Yedek dosyasının klasörünü açmak için bir satıra çift tıklayın."
+        )
+        self._table.cellDoubleClicked.connect(self._on_row_activated)
         header = self._table.horizontalHeader()
         header.setStretchLastSection(True)
         header.setSectionResizeMode(1, QHeaderView.ResizeMode.Stretch)
@@ -154,9 +160,11 @@ class HistoryPage(QWidget):
             row = self._table.rowCount()
             self._table.insertRow(row)
             local = record.started_at.astimezone()
-            self._table.setItem(
-                row, 0, QTableWidgetItem(local.strftime("%d.%m.%Y %H:%M"))
-            )
+            date_item = QTableWidgetItem(local.strftime("%d.%m.%Y %H:%M"))
+            if record.backup_file:
+                date_item.setData(Qt.ItemDataRole.UserRole, record.backup_file)
+                date_item.setToolTip(record.backup_file)
+            self._table.setItem(row, 0, date_item)
             self._table.setItem(row, 1, QTableWidgetItem(record.area_name))
             self._table.setItem(
                 row, 2, QTableWidgetItem(record.backup_type.label_tr)
@@ -171,3 +179,30 @@ class HistoryPage(QWidget):
         self._lbl_total.setText(f"Toplam: {len(rows)}")
         self._lbl_success.setText(f"Başarılı: {success}")
         self._lbl_failed.setText(f"Başarısız: {failed}")
+
+    def _on_row_activated(self, row: int, _column: int) -> None:
+        item = self._table.item(row, 0)
+        if item is None:
+            return
+        backup_file = item.data(Qt.ItemDataRole.UserRole)
+        if not backup_file:
+            QMessageBox.information(
+                self,
+                "Geçmiş",
+                "Bu kayıt için yedek dosyası bulunmuyor.",
+            )
+            return
+        try:
+            reveal_in_file_manager(str(backup_file))
+        except FileNotFoundError:
+            QMessageBox.warning(
+                self,
+                "Geçmiş",
+                f"Yedek dosyası bulunamadı:\n{backup_file}",
+            )
+        except OSError as exc:
+            QMessageBox.warning(
+                self,
+                "Geçmiş",
+                f"Klasör açılamadı:\n{exc}",
+            )

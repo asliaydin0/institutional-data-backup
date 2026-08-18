@@ -3,6 +3,9 @@
 from __future__ import annotations
 
 import logging
+import os
+import subprocess
+import sys
 from pathlib import Path
 
 logger = logging.getLogger(__name__)
@@ -35,3 +38,28 @@ def is_path_accessible(path: str | Path) -> bool:
     except OSError as exc:
         logger.warning("Yol erişim kontrolü başarısız: %s (%s)", target, exc)
         return False
+
+
+def reveal_in_file_manager(path: str | Path) -> None:
+    """Dosyayı veya klasörü sistem dosya yöneticisinde gösterir."""
+    target = to_path(path)
+    if not is_path_accessible(target):
+        raise FileNotFoundError(str(target))
+
+    if sys.platform == "win32":
+        if target.is_file():
+            subprocess.Popen(["explorer", "/select,", str(target)])
+        else:
+            os.startfile(str(target))
+        return
+
+    import shutil
+
+    opener = shutil.which("xdg-open")
+    if opener:
+        folder = target if target.is_dir() else target.parent
+        subprocess.Popen([opener, str(folder)])
+        return
+
+    folder = target if target.is_dir() else target.parent
+    os.startfile(str(folder))
