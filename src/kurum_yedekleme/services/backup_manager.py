@@ -111,7 +111,8 @@ class BackupManager:
         *,
         backup_type: BackupType,
         progress_emitter: Optional[ProgressEmitter] = None,
-        skip_successful_automatic_today: bool = False,
+        skip_successful_automatic_in_period: bool = False,
+        schedule_frequency: str = "daily",
     ) -> JobResult:
         acquired = False
         try:
@@ -136,16 +137,18 @@ class BackupManager:
             runnable: list[BackupArea] = []
             for area in selected:
                 if (
-                    skip_successful_automatic_today
+                    skip_successful_automatic_in_period
                     and backup_type == BackupType.AUTOMATIC
                     and area.id is not None
-                    and self._history.has_successful_automatic_today(area.id)
+                    and self._history.has_successful_automatic_in_period(
+                        area.id, schedule_frequency
+                    )
                 ):
                     job.skipped.append(
-                        f"{area.name}: bugün başarılı otomatik yedek var"
+                        f"{area.name}: bu dönemde başarılı otomatik yedek var"
                     )
                     logger.info(
-                        "Otomatik yedek atlandı (bugün SUCCESS): %s",
+                        "Otomatik yedek atlandı (dönemde SUCCESS): %s",
                         area.name,
                     )
                     continue

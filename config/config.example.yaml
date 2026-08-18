@@ -9,7 +9,10 @@ backup_root: "E:\\Yedekler"
 
 schedule:
   enabled: true
+  frequency: daily
   time: "02:00"
+  weekday: 6
+  day_of_month: 1
 
 retry:
   max_attempts: 3

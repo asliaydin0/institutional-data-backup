@@ -5,9 +5,17 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 
 
+from kurum_yedekleme.config.periodic import (
+    DEFAULT_PERIOD_DAY_OF_MONTH,
+    DEFAULT_PERIOD_FREQUENCY,
+    DEFAULT_PERIOD_WEEKDAY,
+    PERIOD_FREQUENCIES,
+)
 from kurum_yedekleme.config.retention_schema import RetentionConfig
 
 DEFAULT_BACKUP_ROOT = r"E:\Yedekler"
+
+
 @dataclass(frozen=True)
 class AppConfig:
     name: str = "Kurum Yedekleme"
@@ -19,7 +27,16 @@ class AppConfig:
 @dataclass(frozen=True)
 class ScheduleConfig:
     enabled: bool = True
+    frequency: str = DEFAULT_PERIOD_FREQUENCY
     time: str = "02:00"
+    weekday: int = DEFAULT_PERIOD_WEEKDAY
+    day_of_month: int = DEFAULT_PERIOD_DAY_OF_MONTH
+
+    @property
+    def frequency_label_tr(self) -> str:
+        from kurum_yedekleme.config.periodic import frequency_label_tr
+
+        return frequency_label_tr(self.frequency)
 
 
 @dataclass(frozen=True)

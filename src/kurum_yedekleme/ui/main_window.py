@@ -277,7 +277,8 @@ class MainWindow(QMainWindow):
         self.statusBar().showMessage(
             f"Servis: {service.label_tr} | "
             f"{auto_label}: {'Açık' if self._settings.schedule.enabled else 'Kapalı'} "
-            f"@ {self._settings.schedule.time}{busy}"
+            f"@ {self._settings.schedule.frequency_label_tr} "
+            f"{self._settings.schedule.time}{busy}"
         )
 
     def _sync_tray_status(self) -> None:

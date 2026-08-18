@@ -6,6 +6,8 @@ import logging
 from datetime import datetime, time, timedelta
 from typing import Optional
 
+from kurum_yedekleme.config.periodic import period_bounds_utc
+
 from kurum_yedekleme.core.backup_engine import AreaBackupResult
 from kurum_yedekleme.db.history_repository import HistoryRepository
 from kurum_yedekleme.db.models import (
@@ -141,10 +143,14 @@ class HistoryService:
     def count_all(self) -> int:
         return self._repo.count_all()
 
-    def has_successful_automatic_today(
-        self, area_id: int, *, now: Optional[datetime] = None
+    def has_successful_automatic_in_period(
+        self,
+        area_id: int,
+        frequency: str,
+        *,
+        now: Optional[datetime] = None,
     ) -> bool:
-        start, end = local_day_bounds_utc(now)
+        start, end = period_bounds_utc(now or datetime.now().astimezone(), frequency)
         rows = self._repo.fetch_filtered(
             area_id=area_id,
             backup_type=BackupType.AUTOMATIC,
@@ -154,6 +160,13 @@ class HistoryService:
             limit=1,
         )
         return bool(rows)
+
+    def has_successful_automatic_today(
+        self, area_id: int, *, now: Optional[datetime] = None
+    ) -> bool:
+        return self.has_successful_automatic_in_period(
+            area_id, "daily", now=now
+        )
 
     def today_records(
         self, *, now: Optional[datetime] = None

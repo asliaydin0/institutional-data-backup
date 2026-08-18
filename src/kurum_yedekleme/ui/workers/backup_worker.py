@@ -45,7 +45,7 @@ class BackupWorker(QThread):
                 self._areas,
                 backup_type=self._backup_type,
                 progress_emitter=emit_progress,
-                skip_successful_automatic_today=(
+                skip_successful_automatic_in_period=(
                     self._backup_type == BackupType.AUTOMATIC
                 ),
             )

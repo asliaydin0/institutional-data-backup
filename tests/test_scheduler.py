@@ -14,10 +14,10 @@ def test_automatic_skips_if_success_today(runtime, area_source):
     job = runtime.backups.run(
         [area],
         backup_type=BackupType.AUTOMATIC,
-        skip_successful_automatic_today=True,
+        skip_successful_automatic_in_period=True,
     )
     assert job.results == []
-    assert any("bugün başarılı" in s for s in job.skipped)
+    assert any("bu dönemde başarılı" in s for s in job.skipped)
 
 
 def test_missed_backup_runs_pending(runtime, area_source):
@@ -49,6 +49,35 @@ def test_tick_at_scheduled_minute(runtime, area_source):
     last = runtime.history.get_last_backup()
     assert last is not None
     assert last.backup_type == BackupType.AUTOMATIC
+
+
+def test_tick_weekly_on_scheduled_day(runtime, area_source):
+    runtime.areas.add_area(name="Personel", source_path=str(area_source))
+    weekday = datetime.now().astimezone().weekday()
+    runtime.schedule.update_schedule(
+        ScheduleConfig(enabled=True, frequency="weekly", time="02:00", weekday=weekday)
+    )
+    now = datetime.now().astimezone().replace(
+        hour=2, minute=0, second=5, microsecond=0
+    )
+    assert runtime.schedule.tick(now=now) is True
+    last = runtime.history.get_last_backup()
+    assert last is not None
+    assert last.backup_type == BackupType.AUTOMATIC
+
+
+def test_tick_weekly_skips_other_days(runtime, area_source):
+    runtime.areas.add_area(name="Personel", source_path=str(area_source))
+    other_day = (datetime.now().astimezone().weekday() + 1) % 7
+    runtime.schedule.update_schedule(
+        ScheduleConfig(
+            enabled=True, frequency="weekly", time="02:00", weekday=other_day
+        )
+    )
+    now = datetime.now().astimezone().replace(
+        hour=2, minute=0, second=5, microsecond=0
+    )
+    assert runtime.schedule.tick(now=now) is False
 
 
 def test_service_loop_does_not_need_gui(runtime):

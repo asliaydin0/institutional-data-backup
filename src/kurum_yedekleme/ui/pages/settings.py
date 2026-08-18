@@ -1,4 +1,4 @@
-"""Ayarlar — zamanlama, E:\\Yedekler, retry, Windows Service."""
+"""Ayarlar — zamanlama, E:\\Yedekler, saklama, Windows Service."""
 
 from __future__ import annotations
 
@@ -56,9 +56,19 @@ class SettingsPage(QWidget):
         self._root.setToolTip("Production yedekleri yalnızca E:\\Yedekler altındadır.")
         form.addRow("Yedek kökü:", self._root)
 
-        self._enabled = QCheckBox("Günlük otomatik yedeklemeyi etkinleştir")
+        self._enabled = QCheckBox("Otomatik yedeklemeyi etkinleştir")
         self._enabled.setChecked(settings.schedule.enabled)
+        self._enabled.toggled.connect(self._sync_schedule_fields)
         form.addRow(self._enabled)
+
+        self._schedule_freq = QComboBox()
+        self._schedule_freq.addItem("Günlük", "daily")
+        self._schedule_freq.addItem("Haftalık", "weekly")
+        self._schedule_freq.addItem("Aylık", "monthly")
+        sidx = self._schedule_freq.findData(settings.schedule.frequency)
+        self._schedule_freq.setCurrentIndex(sidx if sidx >= 0 else 0)
+        self._schedule_freq.currentIndexChanged.connect(self._sync_schedule_fields)
+        form.addRow("Yedekleme sıklığı:", self._schedule_freq)
 
         self._time_edit = QTimeEdit()
         self._time_edit.setDisplayFormat("HH:mm")
@@ -67,21 +77,17 @@ class SettingsPage(QWidget):
         self._time_edit.setTime(QTime(hour, minute))
         form.addRow("Yedekleme saati:", self._time_edit)
 
-        self._retry_count = QSpinBox()
-        self._retry_count.setRange(1, 20)
-        self._retry_count.setValue(settings.retry.max_attempts)
-        form.addRow("Retry sayısı:", self._retry_count)
+        self._schedule_weekday = QComboBox()
+        for day_index, label in enumerate(WEEKDAY_LABELS_TR):
+            self._schedule_weekday.addItem(label, day_index)
+        swidx = self._schedule_weekday.findData(settings.schedule.weekday)
+        self._schedule_weekday.setCurrentIndex(swidx if swidx >= 0 else 6)
+        form.addRow("Yedekleme günü:", self._schedule_weekday)
 
-        self._retry_delay = QSpinBox()
-        self._retry_delay.setRange(0, 3600)
-        self._retry_delay.setSuffix(" sn")
-        self._retry_delay.setValue(settings.retry.initial_delay_seconds)
-        form.addRow("Retry bekleme:", self._retry_delay)
-
-        self._zip_level = QSpinBox()
-        self._zip_level.setRange(0, 9)
-        self._zip_level.setValue(settings.zip.compresslevel)
-        form.addRow("ZIP sıkıştırma:", self._zip_level)
+        self._schedule_dom = QSpinBox()
+        self._schedule_dom.setRange(1, 28)
+        self._schedule_dom.setValue(settings.schedule.day_of_month)
+        form.addRow("Ayın günü:", self._schedule_dom)
 
         self._retention_enabled = QCheckBox("Eski yedekleri otomatik sil")
         self._retention_enabled.setChecked(settings.retention.enabled)
@@ -127,6 +133,7 @@ class SettingsPage(QWidget):
 
         self._form = form
         layout.addLayout(form)
+        self._sync_schedule_fields()
         self._sync_retention_fields()
 
         self._hint = QLabel(
@@ -196,9 +203,14 @@ class SettingsPage(QWidget):
         self._enabled.setChecked(settings.schedule.enabled)
         hour, minute = self._parse_time(settings.schedule.time)
         self._time_edit.setTime(QTime(hour, minute))
-        self._retry_count.setValue(settings.retry.max_attempts)
-        self._retry_delay.setValue(settings.retry.initial_delay_seconds)
-        self._zip_level.setValue(settings.zip.compresslevel)
+        sidx = self._schedule_freq.findData(settings.schedule.frequency)
+        if sidx >= 0:
+            self._schedule_freq.setCurrentIndex(sidx)
+        swidx = self._schedule_weekday.findData(settings.schedule.weekday)
+        if swidx >= 0:
+            self._schedule_weekday.setCurrentIndex(swidx)
+        self._schedule_dom.setValue(settings.schedule.day_of_month)
+        self._sync_schedule_fields()
         self._retention_enabled.setChecked(settings.retention.enabled)
         self._retention_keep.setValue(settings.retention.keep_days)
         idx = self._retention_freq.findData(settings.retention.frequency)
@@ -211,6 +223,38 @@ class SettingsPage(QWidget):
             self._retention_weekday.setCurrentIndex(widx)
         self._retention_dom.setValue(settings.retention.day_of_month)
         self._sync_retention_fields()
+
+    def _sync_schedule_fields(self) -> None:
+        enabled = self._enabled.isChecked()
+        freq = self._schedule_freq.currentData()
+        for widget in (
+            self._schedule_freq,
+            self._time_edit,
+            self._schedule_weekday,
+            self._schedule_dom,
+        ):
+            widget.setEnabled(enabled)
+        weekly = enabled and freq == "weekly"
+        monthly = enabled and freq == "monthly"
+        self._schedule_weekday.setVisible(weekly)
+        self._schedule_dom.setVisible(monthly)
+        label_week = self._form.labelForField(self._schedule_weekday)
+        if label_week is not None:
+            label_week.setVisible(weekly)
+        label_dom = self._form.labelForField(self._schedule_dom)
+        if label_dom is not None:
+            label_dom.setVisible(monthly)
+
+    def _schedule_values(self) -> tuple[bool, str, str, int, int]:
+        qtime = self._time_edit.time()
+        time_str = f"{qtime.hour():02d}:{qtime.minute():02d}"
+        return (
+            self._enabled.isChecked(),
+            str(self._schedule_freq.currentData()),
+            time_str,
+            int(self._schedule_weekday.currentData()),
+            self._schedule_dom.value(),
+        )
 
     def _sync_retention_fields(self) -> None:
         enabled = self._retention_enabled.isChecked()
@@ -251,8 +295,13 @@ class SettingsPage(QWidget):
         self._svc_label.setText(f"Servis: {current.label_tr}")
 
     def _on_save(self) -> None:
-        qtime = self._time_edit.time()
-        time_str = f"{qtime.hour():02d}:{qtime.minute():02d}"
+        (
+            sched_enabled,
+            sched_freq,
+            sched_time,
+            sched_weekday,
+            sched_dom,
+        ) = self._schedule_values()
         (
             ret_enabled,
             ret_keep,
@@ -262,50 +311,47 @@ class SettingsPage(QWidget):
             ret_dom,
         ) = self._retention_values()
         try:
-            validate_schedule_time(time_str)
+            validate_schedule_time(sched_time)
             validate_schedule_time(ret_time)
             if self._test_mode:
+                from kurum_yedekleme.config.writer import (
+                    validate_retention_settings,
+                    validate_schedule_settings,
+                )
+
                 updated = replace(
                     self._settings,
                     backup_root=self._root.text().strip() or self._settings.backup_root,
-                    schedule=replace(
-                        self._settings.schedule,
-                        enabled=self._enabled.isChecked(),
-                        time=time_str,
+                    schedule=validate_schedule_settings(
+                        replace(
+                            self._settings.schedule,
+                            enabled=sched_enabled,
+                            frequency=sched_freq,
+                            time=sched_time,
+                            weekday=sched_weekday,
+                            day_of_month=sched_dom,
+                        )
                     ),
-                    retention=replace(
-                        self._settings.retention,
-                        enabled=ret_enabled,
-                        keep_days=ret_keep,
-                        frequency=ret_freq,
-                        time=ret_time,
-                        weekday=ret_weekday,
-                        day_of_month=ret_dom,
+                    retention=validate_retention_settings(
+                        replace(
+                            self._settings.retention,
+                            enabled=ret_enabled,
+                            keep_days=ret_keep,
+                            frequency=ret_freq,
+                            time=ret_time,
+                            weekday=ret_weekday,
+                            day_of_month=ret_dom,
+                        )
                     ),
-                    retry=replace(
-                        self._settings.retry,
-                        max_attempts=self._retry_count.value(),
-                        initial_delay_seconds=self._retry_delay.value(),
-                    ),
-                    zip=replace(
-                        self._settings.zip,
-                        compresslevel=self._zip_level.value(),
-                    ),
-                )
-                from kurum_yedekleme.config.writer import validate_retention_settings
-
-                updated = replace(
-                    updated,
-                    retention=validate_retention_settings(updated.retention),
                 )
             else:
                 updated = save_runtime_settings(
                     backup_root=self._settings.backup_root,
-                    schedule_enabled=self._enabled.isChecked(),
-                    schedule_time=time_str,
-                    retry_max_attempts=self._retry_count.value(),
-                    retry_delay_seconds=self._retry_delay.value(),
-                    zip_compresslevel=self._zip_level.value(),
+                    schedule_enabled=sched_enabled,
+                    schedule_frequency=sched_freq,
+                    schedule_time=sched_time,
+                    schedule_weekday=sched_weekday,
+                    schedule_day_of_month=sched_dom,
                     retention_enabled=ret_enabled,
                     retention_keep_days=ret_keep,
                     retention_frequency=ret_freq,

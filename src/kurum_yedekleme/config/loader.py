@@ -10,16 +10,20 @@ from typing import Any, Optional
 
 import yaml
 
-from kurum_yedekleme.config.sanitize import find_obsolete_config_keys, sanitize_config_raw
+from kurum_yedekleme.config.periodic import (
+    DEFAULT_PERIOD_DAY_OF_MONTH,
+    DEFAULT_PERIOD_FREQUENCY,
+    DEFAULT_PERIOD_WEEKDAY,
+)
 from kurum_yedekleme.config.retention_schema import (
     DEFAULT_RETENTION_DAY_OF_MONTH,
     DEFAULT_RETENTION_FREQUENCY,
     DEFAULT_RETENTION_KEEP_DAYS,
     DEFAULT_RETENTION_TIME,
     DEFAULT_RETENTION_WEEKDAY,
-    RETENTION_FREQUENCIES,
     RetentionConfig,
 )
+from kurum_yedekleme.config.sanitize import find_obsolete_config_keys, sanitize_config_raw
 from kurum_yedekleme.config.schema import (
     DEFAULT_BACKUP_ROOT,
     AppConfig,
@@ -103,7 +107,14 @@ def _build_settings(raw: dict[str, Any]) -> AppSettings:
         backup_root=backup_root,
         schedule=ScheduleConfig(
             enabled=bool(schedule_raw.get("enabled", True)),
+            frequency=str(
+                schedule_raw.get("frequency", DEFAULT_PERIOD_FREQUENCY)
+            ).lower(),
             time=str(schedule_raw.get("time", "02:00")),
+            weekday=int(schedule_raw.get("weekday", DEFAULT_PERIOD_WEEKDAY)),
+            day_of_month=int(
+                schedule_raw.get("day_of_month", DEFAULT_PERIOD_DAY_OF_MONTH)
+            ),
         ),
         retention=RetentionConfig(
             enabled=bool(retention_raw.get("enabled", False)),
@@ -176,10 +187,14 @@ def load_settings(config_path: Optional[Path] = None) -> AppSettings:
             ) from exc
 
     settings = _build_settings(raw)
-    from kurum_yedekleme.config.writer import validate_retention_settings
+    from kurum_yedekleme.config.writer import (
+        validate_retention_settings,
+        validate_schedule_settings,
+    )
 
     settings = replace(
         settings,
+        schedule=validate_schedule_settings(settings.schedule),
         retention=validate_retention_settings(settings.retention),
     )
     logger.debug("Yapılandırma yüklendi: %s", path)

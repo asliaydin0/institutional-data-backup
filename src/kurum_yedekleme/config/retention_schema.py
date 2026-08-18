@@ -4,7 +4,9 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-RETENTION_FREQUENCIES = ("daily", "weekly", "monthly")
+from kurum_yedekleme.config.periodic import PERIOD_FREQUENCIES
+
+RETENTION_FREQUENCIES = PERIOD_FREQUENCIES
 DEFAULT_RETENTION_FREQUENCY = "weekly"
 DEFAULT_RETENTION_TIME = "03:00"
 DEFAULT_RETENTION_KEEP_DAYS = 90
