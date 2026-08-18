@@ -48,7 +48,7 @@ class BackupPage(QWidget):
         row.setSpacing(8)
         self.select_all_btn = QPushButton("Tümünü Seç")
         self.select_all_btn.setObjectName("SecondaryButton")
-        self.select_all_btn.clicked.connect(self._select_all_enabled)
+        self.select_all_btn.clicked.connect(self._toggle_select_all_enabled)
         self.backup_btn = QPushButton("Seçili Alanları Yedekle")
         self.backup_btn.setObjectName("PrimaryButton")
         self.backup_btn.clicked.connect(self._emit_backup)
@@ -87,11 +87,30 @@ class BackupPage(QWidget):
                 box.setText(box.text() + "  [pasif]")
             self._box.addWidget(box)
             self._checks.append(box)
+            box.toggled.connect(self._sync_select_all_label)
+        self._sync_select_all_label()
 
-    def _select_all_enabled(self) -> None:
-        for box in self._checks:
-            if box.isEnabled():
-                box.setChecked(True)
+    def _enabled_checks(self) -> list[QCheckBox]:
+        return [box for box in self._checks if box.isEnabled()]
+
+    def _all_enabled_selected(self) -> bool:
+        enabled = self._enabled_checks()
+        return bool(enabled) and all(box.isChecked() for box in enabled)
+
+    def _sync_select_all_label(self) -> None:
+        if self._all_enabled_selected():
+            self.select_all_btn.setText("Seçimi Kaldır")
+        else:
+            self.select_all_btn.setText("Tümünü Seç")
+
+    def _toggle_select_all_enabled(self) -> None:
+        enabled = self._enabled_checks()
+        if not enabled:
+            return
+        select_all = not self._all_enabled_selected()
+        for box in enabled:
+            box.setChecked(select_all)
+        self._sync_select_all_label()
 
     def _emit_backup(self) -> None:
         ids: list[int] = []
