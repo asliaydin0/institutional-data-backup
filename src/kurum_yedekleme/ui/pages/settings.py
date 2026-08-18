@@ -27,6 +27,7 @@ from kurum_yedekleme.config.schema import AppSettings
 from kurum_yedekleme.config.writer import save_runtime_settings, validate_schedule_time
 from kurum_yedekleme.services.windows_service import (
     ServiceStatus,
+    is_user_admin,
     query_service,
     start_service,
     stop_service,
@@ -155,6 +156,14 @@ class SettingsPage(QWidget):
         svc_layout = QVBoxLayout()
         self._svc_label = QLabel("Servis: —")
         svc_layout.addWidget(self._svc_label)
+        self._svc_admin_hint = QLabel(
+            "Servis kurulumu için uygulamayı yönetici olarak çalıştırın "
+            "veya scripts\\install_service.ps1 kullanın."
+        )
+        self._svc_admin_hint.setObjectName("Muted")
+        self._svc_admin_hint.setWordWrap(True)
+        self._svc_admin_hint.setVisible(not is_user_admin())
+        svc_layout.addWidget(self._svc_admin_hint)
         svc_row = QHBoxLayout()
         svc_row.setSpacing(8)
         self._svc_install = QPushButton("Servisi Kur")
@@ -394,14 +403,19 @@ class SettingsPage(QWidget):
             from kurum_yedekleme.win_service import install_win32_service
 
             install_win32_service()
-            QMessageBox.information(self, "Servis", "Windows Service kuruldu.")
-        except Exception as exc:  # noqa: BLE001
-            QMessageBox.warning(
+            status = query_service()
+            if status.state == "not_installed":
+                raise RuntimeError(
+                    "Kurulum tamamlandı ancak servis Windows'ta görünmüyor."
+                )
+            QMessageBox.information(
                 self,
                 "Servis",
-                "Servis kurulamadı (yönetici yetkisi ve pywin32 gerekir).\n\n"
-                f"{exc}",
+                "Windows Service kuruldu.\n\n"
+                "«Servisi Başlat» ile çalıştırabilirsiniz.",
             )
+        except Exception as exc:  # noqa: BLE001
+            QMessageBox.warning(self, "Servis", str(exc))
         self.refresh_service_status()
 
     def _remove_service(self) -> None:

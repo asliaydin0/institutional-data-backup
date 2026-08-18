@@ -199,12 +199,20 @@ def main(argv: Optional[list[str]] = None) -> int:
     if cli.install_service:
         from kurum_yedekleme.win_service import install_win32_service
 
-        install_win32_service()
+        try:
+            install_win32_service()
+        except Exception as exc:  # noqa: BLE001
+            print(f"Servis kurulamadı: {exc}", file=sys.stderr)
+            return 1
         return 0
     if cli.uninstall_service:
         from kurum_yedekleme.win_service import remove_win32_service
 
-        remove_win32_service()
+        try:
+            remove_win32_service()
+        except Exception as exc:  # noqa: BLE001
+            print(f"Servis kaldırılamadı: {exc}", file=sys.stderr)
+            return 1
         return 0
     if cli.run_service:
         from kurum_yedekleme.service_host import run_service_loop

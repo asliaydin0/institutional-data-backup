@@ -38,6 +38,17 @@ class ServiceStatus:
         }[self.state]
 
 
+def is_user_admin() -> bool:
+    if os.name != "nt":
+        return False
+    try:
+        import ctypes
+
+        return bool(ctypes.windll.shell32.IsUserAnAdmin())
+    except (AttributeError, OSError):
+        return False
+
+
 def _run_sc(args: list[str]) -> subprocess.CompletedProcess[str]:
     kwargs = {
         "capture_output": True,
@@ -48,7 +59,7 @@ def _run_sc(args: list[str]) -> subprocess.CompletedProcess[str]:
     }
     if os.name == "nt":
         kwargs["creationflags"] = getattr(subprocess, "CREATE_NO_WINDOW", 0)
-    return subprocess.run(["sc", *args], **kwargs)
+    return subprocess.run(["sc.exe", *args], **kwargs)
 
 
 def query_service() -> ServiceStatus:
