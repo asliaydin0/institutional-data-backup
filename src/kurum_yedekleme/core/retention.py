@@ -2,16 +2,14 @@
 
 from __future__ import annotations
 
-import re
 from dataclasses import dataclass, field
 from datetime import date, datetime, timedelta
 from pathlib import Path
 
+from kurum_yedekleme.core.filenames import parse_backup_folder_date
 from kurum_yedekleme.utils.app_logger import get_logger
 
 logger = get_logger("Retention")
-
-_DATE_DIR_RE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
 
 
 @dataclass
@@ -27,12 +25,7 @@ class RetentionResult:
 
 
 def _parse_date_folder(name: str) -> date | None:
-    if not _DATE_DIR_RE.match(name):
-        return None
-    try:
-        return date.fromisoformat(name)
-    except ValueError:
-        return None
+    return parse_backup_folder_date(name)
 
 
 def purge_old_backups(
@@ -42,7 +35,8 @@ def purge_old_backups(
     now: datetime | None = None,
 ) -> RetentionResult:
     """
-  Yapı: <backup_root>/<Alan>/<YYYY-MM-DD>/*.zip
+  Yapı: <backup_root>/<Alan>/<YYYY-MM-DD_HH-MM-SS>/*.zip
+  (eski yedekler: <Alan>/<YYYY-MM-DD>/*.zip)
 
   keep_days'den eski tarih klasörlerindeki .zip dosyalarını siler.
   Kaynak klasörlere veya .tmp dosyalarına dokunmaz.

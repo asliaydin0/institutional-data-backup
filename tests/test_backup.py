@@ -4,7 +4,15 @@ from pathlib import Path
 
 import pytest
 
-from kurum_yedekleme.core.filenames import next_zip_path, sanitize_filename
+from datetime import date, datetime
+
+from kurum_yedekleme.core.filenames import (
+    BACKUP_FOLDER_RE,
+    backup_timestamp_folder,
+    next_zip_path,
+    parse_backup_folder_date,
+    sanitize_filename,
+)
 from kurum_yedekleme.core.lock import BackupInProgressError, BackupLock
 from kurum_yedekleme.db.models import BackupStatus, BackupType
 from kurum_yedekleme.services.disk_space import (
@@ -20,6 +28,14 @@ def test_sanitize_filename():
     assert sanitize_filename("Helal Akreditasyon") == "Helal Akreditasyon"
     assert ":" not in sanitize_filename('Personel:A/B?*')
     assert sanitize_filename("CON").startswith("_")
+
+
+def test_backup_timestamp_folder():
+    when = datetime(2026, 8, 14, 11, 35, 7, tzinfo=datetime.now().astimezone().tzinfo)
+    assert backup_timestamp_folder(when) == "2026-08-14_11-35-07"
+    assert parse_backup_folder_date("2026-08-14_11-35-07") == date(2026, 8, 14)
+    assert parse_backup_folder_date("2026-08-14") == date(2026, 8, 14)
+    assert BACKUP_FOLDER_RE.match("2026-08-14_11-35-07")
 
 
 def test_next_zip_path(tmp_path: Path):
@@ -54,20 +70,19 @@ def test_backup_creates_area_date_zip(runtime, tmp_path):
     result = job.results[0]
     assert result.zip_path is not None
     assert result.zip_path.name == "Helal Akreditasyon.zip"
-    assert result.zip_path.parent.name.count("-") == 2
+    assert BACKUP_FOLDER_RE.match(result.zip_path.parent.name)
     assert result.zip_path.parent.parent.name == "Helal Akreditasyon"
     assert result.zip_path.is_file()
     tmps = list(Path(runtime.settings.backup_root).rglob("*.tmp"))
     assert tmps == []
 
 
-def test_manual_second_same_day_suffix(runtime, area_source):
+def test_manual_second_backup_does_not_overwrite_first(runtime, area_source):
     area = runtime.areas.add_area(name="Personel", source_path=str(area_source))
     runtime.backups.run([area], backup_type=BackupType.MANUAL)
     job = runtime.backups.run([area], backup_type=BackupType.MANUAL)
-    names = sorted(p.name for p in Path(runtime.settings.backup_root).rglob("*.zip"))
-    assert "Personel.zip" in names
-    assert "Personel_2.zip" in names
+    zips = sorted(Path(runtime.settings.backup_root).rglob("Personel*.zip"))
+    assert len(zips) >= 2
     assert job.results[0].backup_type == BackupType.MANUAL
 
 

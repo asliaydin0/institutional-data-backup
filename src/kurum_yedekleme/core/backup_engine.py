@@ -1,4 +1,4 @@
-"""Tek alan için ZIP yedekleme — E:\\Yedekler\\Alan\\YYYY-MM-DD\\Alan.zip."""
+"""Tek alan için ZIP yedekleme — E:\\Yedekler\\Alan\\YYYY-MM-DD_HH-MM-SS\\Alan.zip."""
 
 from __future__ import annotations
 
@@ -11,6 +11,7 @@ from typing import Callable, Optional
 from kurum_yedekleme.config.schema import AppSettings
 from kurum_yedekleme.core.filenames import (
     area_folder_name,
+    backup_timestamp_folder,
     next_zip_path,
 )
 from kurum_yedekleme.core.progress import BackupProgressEvent, ProgressEmitter
@@ -62,11 +63,10 @@ def _utc_now() -> datetime:
 
 
 def dated_area_directory(backup_root: Path, area_name: str, when: datetime) -> Path:
-    local = when.astimezone() if when.tzinfo else when
     return (
         Path(backup_root)
         / area_folder_name(area_name)
-        / local.strftime("%Y-%m-%d")
+        / backup_timestamp_folder(when)
     )
 
 

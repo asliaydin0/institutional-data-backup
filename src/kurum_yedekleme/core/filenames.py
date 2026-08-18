@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import re
+from datetime import date, datetime
 from pathlib import Path
 
 _INVALID_CHARS = set('<>:"/\\|?*')
@@ -14,6 +15,11 @@ _RESERVED = {
     *(f"COM{i}" for i in range(1, 10)),
     *(f"LPT{i}" for i in range(1, 10)),
 }
+
+# Yedek klasörü: 2026-08-14_11-35-00 veya eski biçim 2026-08-14
+BACKUP_FOLDER_RE = re.compile(
+    r"^(\d{4}-\d{2}-\d{2})(?:_(\d{2}-\d{2}-\d{2}))?$"
+)
 
 
 def sanitize_filename(name: str, *, fallback: str = "Alan") -> str:
@@ -38,6 +44,23 @@ def area_folder_name(area_name: str) -> str:
     return sanitize_filename(area_name)
 
 
+def backup_timestamp_folder(when: datetime) -> str:
+    """Yedek anına göre tarih+saat klasör adı (yerel saat)."""
+    local = when.astimezone() if when.tzinfo else when
+    return local.strftime("%Y-%m-%d_%H-%M-%S")
+
+
+def parse_backup_folder_date(name: str) -> date | None:
+    """Yedek tarih klasöründen gün bilgisini çıkarır (eski ve yeni biçim)."""
+    match = BACKUP_FOLDER_RE.match(name)
+    if not match:
+        return None
+    try:
+        return date.fromisoformat(match.group(1))
+    except ValueError:
+        return None
+
+
 def zip_stem_for(area_name: str) -> str:
     """ZIP dosya adı (uzantısız)."""
     return sanitize_filename(area_name)
@@ -50,9 +73,8 @@ def tmp_name_for(zip_stem: str) -> str:
 
 def next_zip_path(directory: Path, area_name: str) -> Path:
     """
-    Aynı gün ikinci manuel yedek: Personel.zip, Personel_2.zip, ...
-
-    Mevcut dosyanın üzerine yazılmaz.
+    ZIP dosya yolu. Klasör zaten benzersiz tarih-saat içerdiğinden
+    genelde <Alan>.zip yeterlidir; aynı klasörde çakışma olursa _2, _3...
     """
     directory = Path(directory)
     stem = zip_stem_for(area_name)
