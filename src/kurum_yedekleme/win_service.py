@@ -94,16 +94,13 @@ if sys.platform == "win32":
 
 def _service_util():
     global KurumYedeklemeWinService, _win32serviceutil
-    if KurumYedeklemeWinService is None:
+    if KurumYedeklemeWinService is None or _win32serviceutil is None:
         KurumYedeklemeWinService, _win32serviceutil = _build_service_class()
-    if KurumYedeklemeWinService is None:
-        raise RuntimeError("pywin32 yüklenmemiş veya Windows dışı ortam.")
-    _, win32serviceutil = _require_pywin32()
-    return KurumYedeklemeWinService, win32serviceutil
+    return KurumYedeklemeWinService, _win32serviceutil
 
 
 def _configure_installed_service() -> None:
-    _, win32serviceutil = _require_pywin32()
+    _, win32serviceutil = _service_util()
     root = str(get_project_root())
     win32serviceutil.SetServiceCustomOption(SERVICE_NAME, "AppDirectory", root)
 
