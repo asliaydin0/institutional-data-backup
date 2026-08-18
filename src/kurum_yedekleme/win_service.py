@@ -3,19 +3,31 @@
 from __future__ import annotations
 
 import logging
+import os
 import sys
 import threading
 from pathlib import Path
+from typing import TYPE_CHECKING, Any
+
+# pythonservice.exe PYTHONPATH olmadan çalışır; geliştirme ortamında src'yi ekle.
+_PROJECT_ROOT = Path(__file__).resolve().parents[2]
+_SRC_ROOT = _PROJECT_ROOT / "src"
+if _SRC_ROOT.is_dir():
+    _src = str(_SRC_ROOT)
+    if _src not in sys.path:
+        sys.path.insert(0, _src)
 
 from kurum_yedekleme.services.windows_service import SERVICE_DISPLAY, SERVICE_NAME
+from kurum_yedekleme.utils.paths import get_project_root
 
 logger = logging.getLogger(__name__)
 
 _SERVICE_SCRIPT = Path(__file__).resolve()
 
-# pywin32 SCM kaydı modül seviyesinde import edilebilir sınıf bekler.
-KurumYedeklemeWinService = None
-_win32serviceutil = None
+if TYPE_CHECKING:
+    KurumYedeklemeWinService: Any
+else:
+    KurumYedeklemeWinService = None
 
 
 def _require_pywin32():
@@ -32,14 +44,12 @@ def _require_pywin32():
     return servicemanager, win32event, win32service, win32serviceutil
 
 
-def _ensure_service_class():
-    global KurumYedeklemeWinService, _win32serviceutil
-    if KurumYedeklemeWinService is not None and _win32serviceutil is not None:
-        return KurumYedeklemeWinService, _win32serviceutil
-
+def _build_service_class():
     servicemanager, win32event, win32service, win32serviceutil = _require_pywin32()
 
-    class _KurumYedeklemeWinService(win32serviceutil.ServiceFramework):
+    class KurumYedeklemeWinService(win32serviceutil.ServiceFramework):
+        """SCM tarafından import edilebilir olmalı — isim değiştirilmemeli."""
+
         _svc_name_ = SERVICE_NAME
         _svc_display_name_ = SERVICE_DISPLAY
         _svc_description_ = (
@@ -57,15 +67,45 @@ def _ensure_service_class():
             win32event.SetEvent(self.hWaitStop)
 
         def SvcDoRun(self):
+            os.chdir(get_project_root())
             servicemanager.LogInfoMsg(f"{SERVICE_NAME} başladı")
-            from kurum_yedekleme.service_host import run_service_loop
+            try:
+                from kurum_yedekleme.service_host import run_service_loop
 
-            run_service_loop(self._stop)
-            servicemanager.LogInfoMsg(f"{SERVICE_NAME} durdu")
+                run_service_loop(self._stop)
+            except Exception:
+                logger.exception("Servis döngüsü hatası")
+                servicemanager.LogErrorMsg(
+                    f"{SERVICE_NAME} beklenmeyen hata ile durdu"
+                )
+                raise
+            finally:
+                servicemanager.LogInfoMsg(f"{SERVICE_NAME} durdu")
 
-    KurumYedeklemeWinService = _KurumYedeklemeWinService
-    _win32serviceutil = win32serviceutil
     return KurumYedeklemeWinService, win32serviceutil
+
+
+if sys.platform == "win32":
+    try:
+        KurumYedeklemeWinService, _win32serviceutil = _build_service_class()
+    except RuntimeError:
+        _win32serviceutil = None
+
+
+def _service_util():
+    global KurumYedeklemeWinService, _win32serviceutil
+    if KurumYedeklemeWinService is None:
+        KurumYedeklemeWinService, _win32serviceutil = _build_service_class()
+    if KurumYedeklemeWinService is None:
+        raise RuntimeError("pywin32 yüklenmemiş veya Windows dışı ortam.")
+    _, win32serviceutil = _require_pywin32()
+    return KurumYedeklemeWinService, win32serviceutil
+
+
+def _configure_installed_service() -> None:
+    _, win32serviceutil = _require_pywin32()
+    root = str(get_project_root())
+    win32serviceutil.SetServiceCustomOption(SERVICE_NAME, "AppDirectory", root)
 
 
 def install_win32_service() -> None:
@@ -78,16 +118,20 @@ def install_win32_service() -> None:
             "Yönetici PowerShell'de scripts\\install_service.ps1 çalıştırın."
         )
 
-    cls, util = _ensure_service_class()
+    cls, util = _service_util()
+    status = query_service()
+    command = "update" if status.state != "not_installed" else "install"
     saved = sys.argv[:]
     try:
-        sys.argv = [str(_SERVICE_SCRIPT), "--startup=auto", "install"]
+        sys.argv = [str(_SERVICE_SCRIPT), "--startup=auto", command]
         util.HandleCommandLine(cls)
     finally:
         sys.argv = saved
 
-    status = query_service()
-    if status.state == "not_installed":
+    _configure_installed_service()
+
+    after = query_service()
+    if after.state == "not_installed":
         raise RuntimeError(
             "Servis Windows'a kaydedilemedi.\n\n"
             "Yönetici yetkisi ve pywin32 kurulumunu kontrol edin."
@@ -107,7 +151,7 @@ def remove_win32_service() -> None:
     if status.state == "not_installed":
         return
 
-    cls, util = _ensure_service_class()
+    cls, util = _service_util()
     saved = sys.argv[:]
     try:
         sys.argv = [str(_SERVICE_SCRIPT), "remove"]
@@ -125,7 +169,7 @@ def remove_win32_service() -> None:
 
 
 def HandleCommandLine() -> None:
-    cls, util = _ensure_service_class()
+    cls, util = _service_util()
     util.HandleCommandLine(cls)
 
 

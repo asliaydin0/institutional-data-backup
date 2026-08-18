@@ -411,8 +411,8 @@ class SettingsPage(QWidget):
             QMessageBox.information(
                 self,
                 "Servis",
-                "Windows Service kuruldu.\n\n"
-                "«Servisi Başlat» ile çalıştırabilirsiniz.",
+                "Windows Service kuruldu veya güncellendi.\n\n"
+                "«Servisi Başlat» ile çalıştırın.",
             )
         except Exception as exc:  # noqa: BLE001
             QMessageBox.warning(self, "Servis", str(exc))

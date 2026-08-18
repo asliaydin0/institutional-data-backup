@@ -85,6 +85,13 @@ def query_service() -> ServiceStatus:
 
 
 def start_service() -> None:
+    status = query_service()
+    if status.state == "running":
+        return
+    if status.state == "not_installed":
+        raise RuntimeError(
+            "Servis kurulu değil. Önce «Servisi Kur» ile yükleyin."
+        )
     result = _run_sc(["start", SERVICE_NAME])
     if result.returncode != 0:
         detail = (result.stderr or result.stdout or "").strip()
@@ -92,9 +99,15 @@ def start_service() -> None:
 
 
 def stop_service() -> None:
+    status = query_service()
+    if status.state != "running":
+        return
     result = _run_sc(["stop", SERVICE_NAME])
     if result.returncode != 0:
         detail = (result.stderr or result.stdout or "").strip()
+        lowered = detail.lower()
+        if "1062" in detail or "not been started" in lowered or "başlatılmadı" in lowered:
+            return
         raise RuntimeError(f"Servis durdurulamadı: {detail or result.returncode}")
 
 

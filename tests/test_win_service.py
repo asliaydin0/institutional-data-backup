@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import sys
+
 import pytest
 
 from kurum_yedekleme import win_service
@@ -26,9 +28,10 @@ def test_install_verifies_registration(
     )
     monkeypatch.setattr(
         win_service,
-        "_ensure_service_class",
+        "_service_util",
         lambda: (_FakeService, _FakeUtil()),
     )
+    monkeypatch.setattr(win_service, "_configure_installed_service", lambda: None)
     monkeypatch.setattr(
         "kurum_yedekleme.services.windows_service.query_service",
         lambda: _NotInstalled(),
@@ -36,6 +39,15 @@ def test_install_verifies_registration(
 
     with pytest.raises(RuntimeError, match="kaydedilemedi"):
         win_service.install_win32_service()
+
+
+def test_service_class_is_importable_on_windows() -> None:
+    if sys.platform != "win32":
+        pytest.skip("Windows only")
+    assert win_service.KurumYedeklemeWinService is not None
+    assert (
+        win_service.KurumYedeklemeWinService.__name__ == "KurumYedeklemeWinService"
+    )
 
 
 class _FakeService:
