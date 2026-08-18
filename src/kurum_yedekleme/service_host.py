@@ -69,6 +69,7 @@ def run_service_loop(
         message="Windows Service / servis döngüsü başladı.",
     )
     runtime.schedule.start()
+    runtime.retention_scheduler.start()
     try:
         while not stop.is_set():
             time.sleep(0.5)

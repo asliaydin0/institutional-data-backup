@@ -14,6 +14,8 @@ from kurum_yedekleme.db.repository import Repository
 from kurum_yedekleme.services.area_service import AreaService
 from kurum_yedekleme.services.backup_manager import BackupManager
 from kurum_yedekleme.services.history_service import HistoryService
+from kurum_yedekleme.services.retention_scheduler import RetentionScheduler
+from kurum_yedekleme.services.retention_service import RetentionService
 from kurum_yedekleme.services.schedule_service import ScheduleService
 from kurum_yedekleme.utils.paths import resolve_under_root
 
@@ -26,6 +28,8 @@ class AppRuntime:
     history: HistoryService
     backups: BackupManager
     schedule: ScheduleService
+    retention: RetentionService
+    retention_scheduler: RetentionScheduler
     lock: BackupLock
     events: Repository
     data_dir: Path
@@ -33,6 +37,7 @@ class AppRuntime:
     test_mode: bool
 
     def close(self) -> None:
+        self.retention_scheduler.stop()
         self.schedule.stop()
         self.database.close()
 
@@ -54,6 +59,7 @@ def build_runtime(
 
     areas = AreaService(AreasRepository(database))
     history = HistoryService(HistoryRepository(database))
+    history.recover_stale_running_on_startup()
     lock = BackupLock(data_dir / "backup.lock")
     backups = BackupManager(
         settings,
@@ -68,6 +74,17 @@ def build_runtime(
         history,
         poll_interval_seconds=poll_interval_seconds,
     )
+    retention = RetentionService(
+        settings,
+        data_dir=data_dir,
+        test_mode=test_mode,
+    )
+    retention_scheduler = RetentionScheduler(
+        settings.retention,
+        retention,
+        backups,
+        poll_interval_seconds=poll_interval_seconds,
+    )
     return AppRuntime(
         settings=settings,
         database=database,
@@ -75,6 +92,8 @@ def build_runtime(
         history=history,
         backups=backups,
         schedule=schedule,
+        retention=retention,
+        retention_scheduler=retention_scheduler,
         lock=lock,
         events=Repository(database),
         data_dir=data_dir,

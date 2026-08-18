@@ -5,7 +5,26 @@ from pathlib import Path
 import pytest
 
 from kurum_yedekleme.config.schema import AppConfig, AppSettings, RetryConfig, ZipConfig
+from kurum_yedekleme.services.disk_space import DiskSpaceInfo
 from kurum_yedekleme.services.runtime import build_runtime
+
+
+@pytest.fixture(autouse=True)
+def _mock_disk_space_check(monkeypatch):
+    """Test ortamında gerçek disk kotası yedeklemeyi engellemesin."""
+
+    def _always_ok(backup_root: Path, needed_bytes: int) -> DiskSpaceInfo:
+        return DiskSpaceInfo(
+            path=Path(backup_root),
+            total_bytes=10**12,
+            used_bytes=0,
+            free_bytes=10**12,
+        )
+
+    monkeypatch.setattr(
+        "kurum_yedekleme.services.backup_manager.assert_disk_space",
+        _always_ok,
+    )
 
 
 @pytest.fixture

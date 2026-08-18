@@ -149,6 +149,7 @@ class MainWindow(QMainWindow):
 
         if self._test_mode:
             self._runtime.schedule.start()
+            self._runtime.retention_scheduler.start()
 
         self._timer = QTimer(self)
         self._timer.timeout.connect(self._refresh_all)
@@ -219,9 +220,14 @@ class MainWindow(QMainWindow):
             QMessageBox.warning(self, "Ayarlar", str(exc))
             return
         self._runtime.schedule.update_schedule(settings.schedule)
+        self._runtime.retention.update_settings(settings)
+        self._runtime.retention_scheduler.update_retention(settings.retention)
         self._runtime.settings = settings
-        if self._test_mode and not self._runtime.schedule.is_running:
-            self._runtime.schedule.start()
+        if self._test_mode:
+            if not self._runtime.schedule.is_running:
+                self._runtime.schedule.start()
+            if not self._runtime.retention_scheduler.is_running:
+                self._runtime.retention_scheduler.start()
         self._refresh_all()
 
     def _refresh_all(self) -> None:

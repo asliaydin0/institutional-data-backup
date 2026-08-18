@@ -23,6 +23,14 @@ zip:
     - "~$*"
     - "Thumbs.db"
 
+retention:
+  enabled: false
+  keep_days: 90
+  frequency: weekly
+  time: "03:00"
+  weekday: 6
+  day_of_month: 1
+
 logging:
   level: "INFO"
   rotation: "size"

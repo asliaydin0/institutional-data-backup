@@ -237,31 +237,43 @@ class HistoryRepository:
         ).fetchone()
         return _row_to_record(row) if row else None
 
-    def has_successful_automatic_today(
-        self, area_id: int, today_iso_prefix: str
-    ) -> bool:
-        """today_iso_prefix: '2026-08-14' (yerel gün; started_at UTC olabilir)."""
+    def fail_stale_running(
+        self,
+        *,
+        error_message: str = (
+            "Uygulama beklenmedik şekilde kapandı; yedekleme tamamlanmadı."
+        ),
+    ) -> int:
+        """Açılışta yarım kalmış RUNNING kayıtlarını FAILED yapar."""
         conn = self._db.connect()
-        row = conn.execute(
-            """
-            SELECT COUNT(*) AS c FROM backup_history
-            WHERE area_id = ?
-              AND backup_type = ?
-              AND status = ?
-              AND (
-                    started_at LIKE ? || '%'
-                 OR started_at LIKE ? || '%'
-              )
-            """,
-            (
-                area_id,
-                BackupType.AUTOMATIC.value,
-                BackupStatus.SUCCESS.value,
-                today_iso_prefix,
-                f"{today_iso_prefix}T",
-            ),
-        ).fetchone()
-        return bool(row and int(row["c"]) > 0)
+        finished = _to_iso(datetime.now(timezone.utc))
+        try:
+            cursor = conn.execute(
+                """
+                UPDATE backup_history SET
+                    status = ?,
+                    completed_at = ?,
+                    error_message = ?
+                WHERE status = ?
+                """,
+                (
+                    BackupStatus.FAILED.value,
+                    finished,
+                    error_message,
+                    BackupStatus.RUNNING.value,
+                ),
+            )
+            conn.commit()
+            count = int(cursor.rowcount)
+            if count:
+                logger.warning(
+                    "Yarım kalmış %s RUNNING kaydı FAILED olarak işaretlendi",
+                    count,
+                )
+            return count
+        except sqlite3.Error as exc:
+            conn.rollback()
+            raise DatabaseError("Yarım RUNNING kayıtları güncellenemedi.") from exc
 
     def fetch_filtered(
         self,

@@ -21,6 +21,10 @@ class HistoryService:
     def __init__(self, repository: HistoryRepository) -> None:
         self._repo = repository
 
+    def recover_stale_running_on_startup(self) -> int:
+        """Önceki çökme/kill sonrası RUNNING kalan kayıtları FAILED yapar."""
+        return self._repo.fail_stale_running()
+
     def start_run(
         self,
         *,
@@ -44,8 +48,6 @@ class HistoryService:
         error_message = None
         if not result.success:
             error_message = result.message or "Başarısız"
-        elif result.error_files:
-            error_message = f"{len(result.error_files)} dosyada uyarı"
 
         self._repo.update_finished(
             record_id,

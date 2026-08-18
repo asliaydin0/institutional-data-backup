@@ -167,3 +167,32 @@ def test_history_has_area_and_type(runtime, area_source):
     assert rec.backup_type == BackupType.MANUAL
     assert rec.file_size > 0
     assert rec.status == BackupStatus.SUCCESS
+
+
+def test_partial_zip_marked_failed(runtime, area_source, tmp_path):
+    from unittest.mock import patch
+
+    from kurum_yedekleme.core.zipper import ZipBuildResult
+
+    area = runtime.areas.add_area(name="Personel", source_path=str(area_source))
+    zip_path = tmp_path / "Personel.zip"
+    zip_path.write_bytes(b"partial")
+    fake = ZipBuildResult(
+        zip_path=zip_path,
+        file_count=1,
+        original_size=100,
+        zip_size=50,
+        error_files=["locked.txt: Erişim engellendi"],
+    )
+    with patch.object(
+        runtime.backups._engine._zipper,  # noqa: SLF001
+        "create_archive",
+        return_value=fake,
+    ):
+        job = runtime.backups.run([area], backup_type=BackupType.MANUAL)
+    assert len(job.results) == 1
+    assert job.results[0].success is False
+    assert job.results[0].status == BackupStatus.FAILED
+    rec = runtime.history.get_last_backup()
+    assert rec is not None
+    assert rec.status == BackupStatus.FAILED

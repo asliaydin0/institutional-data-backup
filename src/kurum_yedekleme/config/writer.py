@@ -15,6 +15,8 @@ from kurum_yedekleme.config.loader import (
     ensure_config_file,
     load_settings,
 )
+from kurum_yedekleme.config.retention_schema import RETENTION_FREQUENCIES, RetentionConfig
+from kurum_yedekleme.config.sanitize import sanitize_config_raw
 from kurum_yedekleme.config.schema import AppSettings, ScheduleConfig
 
 logger = logging.getLogger(__name__)
@@ -31,6 +33,35 @@ def validate_schedule_time(value: str) -> str:
     return text
 
 
+def validate_retention_settings(retention: RetentionConfig) -> RetentionConfig:
+    freq = str(retention.frequency or "").strip().lower()
+    if freq not in RETENTION_FREQUENCIES:
+        raise ConfigError(
+            f"Geçersiz temizlik sıklığı: {retention.frequency!r}. "
+            f"Beklenen: {', '.join(RETENTION_FREQUENCIES)}"
+        )
+    time_str = validate_schedule_time(retention.time)
+    keep = int(retention.keep_days)
+    if keep < 1 or keep > 3650:
+        raise ConfigError("Saklama süresi 1–3650 gün arasında olmalıdır.")
+    weekday = int(retention.weekday)
+    if weekday < 0 or weekday > 6:
+        raise ConfigError(
+            "Haftanın günü 0 (Pazartesi) – 6 (Pazar) arasında olmalıdır."
+        )
+    day = int(retention.day_of_month)
+    if day < 1 or day > 28:
+        raise ConfigError("Ayın günü 1–28 arasında olmalıdır (aylık temizlik).")
+    return RetentionConfig(
+        enabled=bool(retention.enabled),
+        keep_days=keep,
+        frequency=freq,
+        time=time_str,
+        weekday=weekday,
+        day_of_month=day,
+    )
+
+
 def _load_raw(path: Path) -> dict[str, Any]:
     try:
         with path.open("r", encoding="utf-8") as handle:
@@ -45,18 +76,7 @@ def _load_raw(path: Path) -> dict[str, Any]:
 
 
 def _dump_raw(path: Path, raw: dict[str, Any]) -> None:
-    # Kullanılmayan eski anahtarları yazmayın
-    for obsolete in (
-        "sources",
-        "destination",
-        "integrity",
-        "security",
-        "autostart",
-    ):
-        raw.pop(obsolete, None)
-    app = raw.get("app")
-    if isinstance(app, dict):
-        app.pop("temp_dir", None)
+    raw = sanitize_config_raw(raw)
     try:
         with path.open("w", encoding="utf-8") as handle:
             yaml.safe_dump(
@@ -78,6 +98,12 @@ def save_runtime_settings(
     retry_max_attempts: int,
     retry_delay_seconds: int,
     zip_compresslevel: int = 6,
+    retention_enabled: bool = False,
+    retention_keep_days: int = 90,
+    retention_frequency: str = "weekly",
+    retention_time: str = "03:00",
+    retention_weekday: int = 6,
+    retention_day_of_month: int = 1,
     config_path: Optional[Path] = None,
 ) -> AppSettings:
     path = ensure_config_file(config_path or default_config_path())
@@ -118,6 +144,24 @@ def save_runtime_settings(
         zip_cfg = {}
         raw["zip"] = zip_cfg
     zip_cfg["compresslevel"] = int(zip_compresslevel)
+
+    retention_cfg = RetentionConfig(
+        enabled=bool(retention_enabled),
+        keep_days=int(retention_keep_days),
+        frequency=str(retention_frequency).lower(),
+        time=retention_time,
+        weekday=int(retention_weekday),
+        day_of_month=int(retention_day_of_month),
+    )
+    validate_retention_settings(retention_cfg)
+    raw["retention"] = {
+        "enabled": retention_cfg.enabled,
+        "keep_days": retention_cfg.keep_days,
+        "frequency": retention_cfg.frequency,
+        "time": retention_cfg.time,
+        "weekday": retention_cfg.weekday,
+        "day_of_month": retention_cfg.day_of_month,
+    }
 
     _dump_raw(path, raw)
     logger.info("Uygulama ayarları kaydedildi: %s", path)

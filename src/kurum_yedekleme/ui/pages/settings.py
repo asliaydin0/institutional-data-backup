@@ -8,6 +8,7 @@ from PySide6.QtCore import QTime, Signal
 from PySide6.QtWidgets import (
     QAbstractSpinBox,
     QCheckBox,
+    QComboBox,
     QFormLayout,
     QHBoxLayout,
     QLabel,
@@ -21,6 +22,7 @@ from PySide6.QtWidgets import (
 )
 
 from kurum_yedekleme.config.loader import ConfigError
+from kurum_yedekleme.config.retention_schema import WEEKDAY_LABELS_TR
 from kurum_yedekleme.config.schema import AppSettings
 from kurum_yedekleme.config.writer import save_runtime_settings, validate_schedule_time
 from kurum_yedekleme.services.windows_service import (
@@ -80,11 +82,57 @@ class SettingsPage(QWidget):
         self._zip_level.setRange(0, 9)
         self._zip_level.setValue(settings.zip.compresslevel)
         form.addRow("ZIP sıkıştırma:", self._zip_level)
+
+        self._retention_enabled = QCheckBox("Eski yedekleri otomatik sil")
+        self._retention_enabled.setChecked(settings.retention.enabled)
+        self._retention_enabled.toggled.connect(self._sync_retention_fields)
+        form.addRow(self._retention_enabled)
+
+        self._retention_keep = QSpinBox()
+        self._retention_keep.setRange(1, 3650)
+        self._retention_keep.setSuffix(" gün")
+        self._retention_keep.setValue(settings.retention.keep_days)
+        self._retention_keep.setToolTip(
+            "Bu süreden daha eski tarih klasörlerindeki ZIP dosyaları silinir."
+        )
+        form.addRow("Saklama süresi:", self._retention_keep)
+
+        self._retention_freq = QComboBox()
+        self._retention_freq.addItem("Günlük", "daily")
+        self._retention_freq.addItem("Haftalık", "weekly")
+        self._retention_freq.addItem("Aylık", "monthly")
+        idx = self._retention_freq.findData(settings.retention.frequency)
+        self._retention_freq.setCurrentIndex(idx if idx >= 0 else 1)
+        self._retention_freq.currentIndexChanged.connect(self._sync_retention_fields)
+        form.addRow("Temizlik sıklığı:", self._retention_freq)
+
+        self._retention_time = QTimeEdit()
+        self._retention_time.setDisplayFormat("HH:mm")
+        self._retention_time.setButtonSymbols(QAbstractSpinBox.ButtonSymbols.UpDownArrows)
+        rh, rm = self._parse_time(settings.retention.time)
+        self._retention_time.setTime(QTime(rh, rm))
+        form.addRow("Temizlik saati:", self._retention_time)
+
+        self._retention_weekday = QComboBox()
+        for day_index, label in enumerate(WEEKDAY_LABELS_TR):
+            self._retention_weekday.addItem(label, day_index)
+        widx = self._retention_weekday.findData(settings.retention.weekday)
+        self._retention_weekday.setCurrentIndex(widx if widx >= 0 else 6)
+        form.addRow("Temizlik günü:", self._retention_weekday)
+
+        self._retention_dom = QSpinBox()
+        self._retention_dom.setRange(1, 28)
+        self._retention_dom.setValue(settings.retention.day_of_month)
+        form.addRow("Ayın günü:", self._retention_dom)
+
+        self._form = form
         layout.addLayout(form)
+        self._sync_retention_fields()
 
         self._hint = QLabel(
-            "Otomatik yedekleme Windows Service tarafından çalıştırılır. "
-            "GUI kapatılsa bile servis devam eder. Alanlar SQLite'da tutulur."
+            "Otomatik yedekleme ve eski ZIP temizliği Windows Service tarafından "
+            "çalıştırılır. GUI kapatılsa bile servis devam eder. "
+            "Alanlar SQLite'da tutulur."
         )
         self._hint.setObjectName("Muted")
         self._hint.setWordWrap(True)
@@ -151,6 +199,52 @@ class SettingsPage(QWidget):
         self._retry_count.setValue(settings.retry.max_attempts)
         self._retry_delay.setValue(settings.retry.initial_delay_seconds)
         self._zip_level.setValue(settings.zip.compresslevel)
+        self._retention_enabled.setChecked(settings.retention.enabled)
+        self._retention_keep.setValue(settings.retention.keep_days)
+        idx = self._retention_freq.findData(settings.retention.frequency)
+        if idx >= 0:
+            self._retention_freq.setCurrentIndex(idx)
+        rh, rm = self._parse_time(settings.retention.time)
+        self._retention_time.setTime(QTime(rh, rm))
+        widx = self._retention_weekday.findData(settings.retention.weekday)
+        if widx >= 0:
+            self._retention_weekday.setCurrentIndex(widx)
+        self._retention_dom.setValue(settings.retention.day_of_month)
+        self._sync_retention_fields()
+
+    def _sync_retention_fields(self) -> None:
+        enabled = self._retention_enabled.isChecked()
+        freq = self._retention_freq.currentData()
+        for widget in (
+            self._retention_keep,
+            self._retention_freq,
+            self._retention_time,
+            self._retention_weekday,
+            self._retention_dom,
+        ):
+            widget.setEnabled(enabled)
+        weekly = enabled and freq == "weekly"
+        monthly = enabled and freq == "monthly"
+        self._retention_weekday.setVisible(weekly)
+        self._retention_dom.setVisible(monthly)
+        label_week = self._form.labelForField(self._retention_weekday)
+        if label_week is not None:
+            label_week.setVisible(weekly)
+        label_dom = self._form.labelForField(self._retention_dom)
+        if label_dom is not None:
+            label_dom.setVisible(monthly)
+
+    def _retention_values(self) -> tuple[bool, int, str, str, int, int]:
+        qtime = self._retention_time.time()
+        time_str = f"{qtime.hour():02d}:{qtime.minute():02d}"
+        return (
+            self._retention_enabled.isChecked(),
+            self._retention_keep.value(),
+            str(self._retention_freq.currentData()),
+            time_str,
+            int(self._retention_weekday.currentData()),
+            self._retention_dom.value(),
+        )
 
     def refresh_service_status(self, status: ServiceStatus | None = None) -> None:
         current = status or query_service()
@@ -159,8 +253,17 @@ class SettingsPage(QWidget):
     def _on_save(self) -> None:
         qtime = self._time_edit.time()
         time_str = f"{qtime.hour():02d}:{qtime.minute():02d}"
+        (
+            ret_enabled,
+            ret_keep,
+            ret_freq,
+            ret_time,
+            ret_weekday,
+            ret_dom,
+        ) = self._retention_values()
         try:
             validate_schedule_time(time_str)
+            validate_schedule_time(ret_time)
             if self._test_mode:
                 updated = replace(
                     self._settings,
@@ -169,6 +272,15 @@ class SettingsPage(QWidget):
                         self._settings.schedule,
                         enabled=self._enabled.isChecked(),
                         time=time_str,
+                    ),
+                    retention=replace(
+                        self._settings.retention,
+                        enabled=ret_enabled,
+                        keep_days=ret_keep,
+                        frequency=ret_freq,
+                        time=ret_time,
+                        weekday=ret_weekday,
+                        day_of_month=ret_dom,
                     ),
                     retry=replace(
                         self._settings.retry,
@@ -180,6 +292,12 @@ class SettingsPage(QWidget):
                         compresslevel=self._zip_level.value(),
                     ),
                 )
+                from kurum_yedekleme.config.writer import validate_retention_settings
+
+                updated = replace(
+                    updated,
+                    retention=validate_retention_settings(updated.retention),
+                )
             else:
                 updated = save_runtime_settings(
                     backup_root=self._settings.backup_root,
@@ -188,6 +306,12 @@ class SettingsPage(QWidget):
                     retry_max_attempts=self._retry_count.value(),
                     retry_delay_seconds=self._retry_delay.value(),
                     zip_compresslevel=self._zip_level.value(),
+                    retention_enabled=ret_enabled,
+                    retention_keep_days=ret_keep,
+                    retention_frequency=ret_freq,
+                    retention_time=ret_time,
+                    retention_weekday=ret_weekday,
+                    retention_day_of_month=ret_dom,
                 )
         except ConfigError as exc:
             QMessageBox.warning(self, "Ayarlar", str(exc))

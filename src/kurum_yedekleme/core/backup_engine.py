@@ -263,10 +263,37 @@ class BackupEngine:
                 return fail(str(exc))
             finished = _utc_now()
             duration = max(0.0, (finished - started).total_seconds())
+            if build.error_files:
+                sample = "; ".join(build.error_files[:3])
+                if len(build.error_files) > 3:
+                    sample += f" (+{len(build.error_files) - 3} dosya daha)"
+                message = (
+                    f"{len(build.error_files)} dosya ZIP'e eklenemedi; "
+                    f"yedekleme eksik sayıldı. Örnek: {sample}"
+                )
+                emit("hata", message, percent=100)
+                logger.error(
+                    "%s: kısmi ZIP — %s dosya eklenemedi",
+                    area.name,
+                    len(build.error_files),
+                    operation="finish",
+                )
+                return AreaBackupResult(
+                    success=False,
+                    status=BackupStatus.FAILED,
+                    area=area,
+                    backup_type=backup_type,
+                    zip_path=build.zip_path,
+                    file_count=build.file_count,
+                    zip_size=build.zip_size,
+                    started_at=started,
+                    finished_at=finished,
+                    duration_seconds=duration,
+                    error_files=list(build.error_files),
+                    message=message,
+                )
             status = BackupStatus.SUCCESS
             message = "Yedekleme tamamlandı."
-            if build.error_files:
-                message = f"Yedekleme tamamlandı ({len(build.error_files)} dosyada uyarı)."
             emit(
                 "tamamlandi",
                 f"{area.name}: {format_bytes(build.zip_size)}",

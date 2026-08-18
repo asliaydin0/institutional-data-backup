@@ -4,11 +4,22 @@ from __future__ import annotations
 
 import logging
 import shutil
+from dataclasses import replace
 from pathlib import Path
 from typing import Any, Optional
 
 import yaml
 
+from kurum_yedekleme.config.sanitize import find_obsolete_config_keys, sanitize_config_raw
+from kurum_yedekleme.config.retention_schema import (
+    DEFAULT_RETENTION_DAY_OF_MONTH,
+    DEFAULT_RETENTION_FREQUENCY,
+    DEFAULT_RETENTION_KEEP_DAYS,
+    DEFAULT_RETENTION_TIME,
+    DEFAULT_RETENTION_WEEKDAY,
+    RETENTION_FREQUENCIES,
+    RetentionConfig,
+)
 from kurum_yedekleme.config.schema import (
     DEFAULT_BACKUP_ROOT,
     AppConfig,
@@ -67,6 +78,7 @@ def _build_settings(raw: dict[str, Any]) -> AppSettings:
     retry_raw = _require_mapping(raw.get("retry") or {}, "retry")
     logging_raw = _require_mapping(raw.get("logging") or {}, "logging")
     zip_raw = _require_mapping(raw.get("zip") or {}, "zip")
+    retention_raw = _require_mapping(raw.get("retention") or {}, "retention")
 
     backup_root = str(
         raw.get("backup_root")
@@ -92,6 +104,18 @@ def _build_settings(raw: dict[str, Any]) -> AppSettings:
         schedule=ScheduleConfig(
             enabled=bool(schedule_raw.get("enabled", True)),
             time=str(schedule_raw.get("time", "02:00")),
+        ),
+        retention=RetentionConfig(
+            enabled=bool(retention_raw.get("enabled", False)),
+            keep_days=int(retention_raw.get("keep_days", DEFAULT_RETENTION_KEEP_DAYS)),
+            frequency=str(
+                retention_raw.get("frequency", DEFAULT_RETENTION_FREQUENCY)
+            ).lower(),
+            time=str(retention_raw.get("time", DEFAULT_RETENTION_TIME)),
+            weekday=int(retention_raw.get("weekday", DEFAULT_RETENTION_WEEKDAY)),
+            day_of_month=int(
+                retention_raw.get("day_of_month", DEFAULT_RETENTION_DAY_OF_MONTH)
+            ),
         ),
         retry=RetryConfig(
             max_attempts=int(retry_count),
@@ -127,6 +151,36 @@ def load_settings(config_path: Optional[Path] = None) -> AppSettings:
     if not isinstance(raw, dict):
         raise ConfigError("Yapılandırma kökü bir nesne olmalıdır.")
 
+    obsolete = find_obsolete_config_keys(raw)
+    if obsolete:
+        logger.warning(
+            "Yapılandırmada kullanılmayan eski anahtarlar bulundu ve kaldırılacak: %s. "
+            "Yedekleme alanları artık yalnızca uygulama içinden (SQLite) yönetilir; "
+            "sources/destination/integrity/security/autostart okunmaz.",
+            ", ".join(obsolete),
+        )
+        raw = sanitize_config_raw(raw)
+        try:
+            with path.open("w", encoding="utf-8") as handle:
+                yaml.safe_dump(
+                    raw,
+                    handle,
+                    allow_unicode=True,
+                    default_flow_style=False,
+                    sort_keys=False,
+                )
+            logger.info("Yapılandırma güncellendi (eski anahtarlar temizlendi): %s", path)
+        except OSError as exc:
+            raise ConfigError(
+                f"Eski yapılandırma anahtarları temizlenemedi: {path}"
+            ) from exc
+
     settings = _build_settings(raw)
+    from kurum_yedekleme.config.writer import validate_retention_settings
+
+    settings = replace(
+        settings,
+        retention=validate_retention_settings(settings.retention),
+    )
     logger.debug("Yapılandırma yüklendi: %s", path)
     return settings

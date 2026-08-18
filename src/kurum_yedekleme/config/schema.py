@@ -5,9 +5,9 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 
 
+from kurum_yedekleme.config.retention_schema import RetentionConfig
+
 DEFAULT_BACKUP_ROOT = r"E:\Yedekler"
-
-
 @dataclass(frozen=True)
 class AppConfig:
     name: str = "Kurum Yedekleme"
@@ -55,6 +55,7 @@ class AppSettings:
     app: AppConfig = field(default_factory=AppConfig)
     backup_root: str = DEFAULT_BACKUP_ROOT
     schedule: ScheduleConfig = field(default_factory=ScheduleConfig)
+    retention: RetentionConfig = field(default_factory=RetentionConfig)
     retry: RetryConfig = field(default_factory=RetryConfig)
     logging: LoggingConfig = field(default_factory=LoggingConfig)
     zip: ZipConfig = field(default_factory=ZipConfig)
