@@ -36,7 +36,6 @@ from kurum_yedekleme.ui.pages.dashboard import DashboardPage
 from kurum_yedekleme.ui.pages.history import HistoryPage
 from kurum_yedekleme.ui.pages.logs_view import LogsPage
 from kurum_yedekleme.ui.pages.settings import SettingsPage
-from kurum_yedekleme.ui.theme import APP_STYLESHEET
 from kurum_yedekleme.ui.tray import SystemTrayManager, TrayStatus
 from kurum_yedekleme.ui.workers.backup_worker import BackupWorker
 
@@ -71,7 +70,6 @@ class MainWindow(QMainWindow):
             title = f"{__app_name__} — ⚠ TEST MODU AKTİF v{__version__}"
         self.setWindowTitle(title)
         self.resize(1240, 780)
-        self.setStyleSheet(APP_STYLESHEET)
 
         root = QWidget()
         self.setCentralWidget(root)

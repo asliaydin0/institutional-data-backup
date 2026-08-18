@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from PySide6.QtCore import Signal
+from PySide6.QtCore import Qt, Signal
 from PySide6.QtWidgets import (
     QAbstractItemView,
     QCheckBox,
@@ -24,9 +24,18 @@ from PySide6.QtWidgets import (
 
 from kurum_yedekleme.db.models import BackupArea, BackupHistoryRecord
 from kurum_yedekleme.services.area_service import AreaError, AreaService
+from kurum_yedekleme.ui.widgets.elided_path_label import ElidedPathLabel
 from kurum_yedekleme.ui.widgets.page_header import PageHeader
 from kurum_yedekleme.ui.widgets.section_panel import SectionPanel
 from kurum_yedekleme.ui.widgets.status_badge import status_badge_widget
+
+
+def _table_action_button(text: str, *, danger: bool = False) -> QPushButton:
+    btn = QPushButton(text)
+    btn.setObjectName("TableDangerButton" if danger else "TableActionButton")
+    btn.setCursor(Qt.CursorShape.PointingHandCursor)
+    btn.setFixedHeight(28)
+    return btn
 
 
 class AreaEditDialog(QDialog):
@@ -89,19 +98,17 @@ class AreasPage(QWidget):
         layout.setContentsMargins(24, 20, 24, 20)
         layout.setSpacing(16)
 
-        header = PageHeader(
-            "Yedekleme Alanları",
-            "Birim klasörlerini tanımlayın, düzenleyin veya kaldırın.",
+        layout.addWidget(
+            PageHeader(
+                "Yedekleme Alanları",
+                "Birim klasörlerini tanımlayın, düzenleyin veya kaldırın.",
+            )
         )
-        layout.addWidget(header)
 
-        btns = QHBoxLayout()
         add_btn = QPushButton("Yeni Alan Ekle")
         add_btn.setObjectName("PrimaryButton")
         add_btn.clicked.connect(self._add)
-        btns.addWidget(add_btn)
-        btns.addStretch(1)
-        layout.addLayout(btns)
+        layout.addWidget(add_btn)
 
         table_panel = SectionPanel("Tanımlı Alanlar")
         self._table = QTableWidget(0, 6)
@@ -115,7 +122,12 @@ class AreasPage(QWidget):
         header = self._table.horizontalHeader()
         header.setSectionResizeMode(0, QHeaderView.ResizeMode.ResizeToContents)
         header.setSectionResizeMode(1, QHeaderView.ResizeMode.Stretch)
-        header.setSectionResizeMode(5, QHeaderView.ResizeMode.ResizeToContents)
+        header.setSectionResizeMode(2, QHeaderView.ResizeMode.ResizeToContents)
+        header.setSectionResizeMode(3, QHeaderView.ResizeMode.ResizeToContents)
+        header.setSectionResizeMode(4, QHeaderView.ResizeMode.ResizeToContents)
+        header.setSectionResizeMode(5, QHeaderView.ResizeMode.Fixed)
+        self._table.setColumnWidth(5, 220)
+        self._table.setColumnWidth(1, 360)
         table_panel.add_widget(self._table)
         layout.addWidget(table_panel, stretch=1)
         self.refresh()
@@ -137,8 +149,16 @@ class AreasPage(QWidget):
                 local = last.started_at.astimezone()
                 last_text = local.strftime("%d.%m.%Y %H:%M")
                 type_text = last.backup_type.label_tr
-            self._table.setItem(row, 0, QTableWidgetItem(area.name))
-            self._table.setItem(row, 1, QTableWidgetItem(area.source_path))
+
+            name_item = QTableWidgetItem(area.name)
+            self._table.setItem(row, 0, name_item)
+
+            path_cell = QWidget()
+            path_layout = QHBoxLayout(path_cell)
+            path_layout.setContentsMargins(8, 0, 8, 0)
+            path_layout.addWidget(ElidedPathLabel(area.source_path))
+            self._table.setCellWidget(row, 1, path_cell)
+
             self._table.setCellWidget(
                 row,
                 2,
@@ -152,22 +172,28 @@ class AreasPage(QWidget):
 
             cell = QWidget()
             row_btns = QHBoxLayout(cell)
-            row_btns.setContentsMargins(4, 2, 4, 2)
-            edit = QPushButton("Düzenle")
-            edit.setObjectName("SecondaryButton")
-            toggle = QPushButton("Pasifleştir" if area.enabled else "Aktifleştir")
-            toggle.setObjectName("SecondaryButton")
-            delete = QPushButton("Sil")
-            delete.setObjectName("DangerButton")
+            row_btns.setContentsMargins(6, 4, 6, 4)
+            row_btns.setSpacing(6)
+
+            edit = _table_action_button("Düzenle")
+            toggle = _table_action_button(
+                "Pasif yap" if area.enabled else "Aktif yap",
+                danger=not area.enabled,
+            )
+            delete = _table_action_button("Sil", danger=True)
+
             area_id = area.id
             edit.clicked.connect(lambda _, i=area_id: self._edit(i))
-            toggle.clicked.connect(lambda _, i=area_id, e=area.enabled: self._toggle(i, not e))
+            toggle.clicked.connect(
+                lambda _, i=area_id, e=area.enabled: self._set_enabled(i, not e)
+            )
             delete.clicked.connect(lambda _, i=area_id: self._delete(i))
+
             row_btns.addWidget(edit)
             row_btns.addWidget(toggle)
             row_btns.addWidget(delete)
             self._table.setCellWidget(row, 5, cell)
-            self._table.setRowHeight(row, 44)
+            self._table.setRowHeight(row, 42)
 
     def _add(self) -> None:
         dialog = AreaEditDialog(self)
@@ -204,7 +230,7 @@ class AreasPage(QWidget):
         self.refresh()
         self.areas_changed.emit()
 
-    def _toggle(self, area_id: int | None, enabled: bool) -> None:
+    def _set_enabled(self, area_id: int | None, enabled: bool) -> None:
         if area_id is None:
             return
         try:

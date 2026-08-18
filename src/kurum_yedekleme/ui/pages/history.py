@@ -24,6 +24,7 @@ from kurum_yedekleme.db.models import BackupArea, BackupStatus, BackupType
 from kurum_yedekleme.services.history_service import HistoryService
 from kurum_yedekleme.ui.widgets.page_header import PageHeader
 from kurum_yedekleme.ui.widgets.section_panel import SectionPanel
+from kurum_yedekleme.ui.theme import style_date_edit
 from kurum_yedekleme.ui.widgets.status_badge import (
     backup_status_kind,
     status_badge_widget,
@@ -89,9 +90,11 @@ class HistoryPage(QWidget):
         self._from = QDateEdit()
         self._from.setCalendarPopup(True)
         self._from.setDate(QDate.currentDate().addMonths(-1))
+        style_date_edit(self._from)
         self._to = QDateEdit()
         self._to.setCalendarPopup(True)
         self._to.setDate(QDate.currentDate())
+        style_date_edit(self._to)
         apply_btn = QPushButton("Filtrele")
         apply_btn.setObjectName("SecondaryButton")
         apply_btn.clicked.connect(self.refresh)

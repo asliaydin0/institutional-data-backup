@@ -1,5 +1,11 @@
 """Kurumsal arayüz teması — resmi kurum kullanımına uygun sade görünüm."""
 
+from __future__ import annotations
+
+from PySide6.QtCore import Qt
+from PySide6.QtGui import QColor, QPalette
+from PySide6.QtWidgets import QApplication, QDateEdit
+
 APP_STYLESHEET = """
 /* ── Genel ───────────────────────────────────────────────────────────── */
 QMainWindow {
@@ -275,6 +281,34 @@ QPushButton#DangerButton:hover {
     background: #fef2f2;
     border-color: #ef9a9a;
 }
+QPushButton#TableActionButton {
+    background: #ffffff;
+    color: #1a4f8b;
+    border: 1px solid #c5cdd8;
+    border-radius: 4px;
+    padding: 2px 10px;
+    font-size: 12px;
+    font-weight: 600;
+    min-width: 0;
+}
+QPushButton#TableActionButton:hover {
+    background: #e8f0fa;
+    border-color: #1a4f8b;
+}
+QPushButton#TableDangerButton {
+    background: #ffffff;
+    color: #b91c1c;
+    border: 1px solid #f5c2c2;
+    border-radius: 4px;
+    padding: 2px 10px;
+    font-size: 12px;
+    font-weight: 600;
+    min-width: 0;
+}
+QPushButton#TableDangerButton:hover {
+    background: #fef2f2;
+    border-color: #ef9a9a;
+}
 
 /* ── Form öğeleri ──────────────────────────────────────────────────── */
 QLineEdit, QComboBox, QDateEdit {
@@ -369,7 +403,66 @@ QHeaderView::section {
     letter-spacing: 0.3px;
 }
 QTableWidget::item {
-    padding: 4px 6px;
+    padding: 4px 8px;
+    color: #1a2332;
+    background: transparent;
+}
+QLabel#TablePathLabel {
+    background: transparent;
+    color: #1a2332;
+    padding: 0 4px;
+}
+
+/* ── Tooltip ve açılır pencereler ───────────────────────────────────── */
+QToolTip {
+    background-color: #ffffff;
+    color: #1a2332;
+    border: 1px solid #c5cdd8;
+    padding: 6px 10px;
+    border-radius: 4px;
+}
+QCalendarWidget {
+    background: #ffffff;
+    color: #1a2332;
+}
+QCalendarWidget QWidget {
+    alternate-background-color: #f7f8fa;
+    color: #1a2332;
+}
+QCalendarWidget QWidget#qt_calendar_navigationbar {
+    background: #f4f6f8;
+    border-bottom: 1px solid #d4dae3;
+}
+QCalendarWidget QToolButton {
+    background: #ffffff;
+    color: #1a2332;
+    border: 1px solid #c5cdd8;
+    border-radius: 4px;
+    padding: 4px 8px;
+    font-weight: 600;
+}
+QCalendarWidget QToolButton:hover {
+    background: #e8f0fa;
+    border-color: #1a4f8b;
+}
+QCalendarWidget QMenu {
+    background: #ffffff;
+    color: #1a2332;
+    border: 1px solid #d4dae3;
+}
+QCalendarWidget QSpinBox {
+    background: #ffffff;
+    color: #1a2332;
+    border: 1px solid #c5cdd8;
+}
+QCalendarWidget QAbstractItemView:enabled {
+    background: #ffffff;
+    color: #1a2332;
+    selection-background-color: #1a4f8b;
+    selection-color: #ffffff;
+}
+QCalendarWidget QAbstractItemView:disabled {
+    color: #9aa8b8;
 }
 
 /* ── İlerleme ve durum çubuğu ──────────────────────────────────────── */
@@ -431,3 +524,38 @@ QLabel#AboutCredit {
     color: #8b97a8;
 }
 """
+
+
+def apply_app_theme(app: QApplication) -> None:
+    """Tüm pencere, tooltip ve takvim popup'larına kurumsal tema uygular."""
+    app.setStyle("Fusion")
+    app.setStyleSheet(APP_STYLESHEET)
+
+    palette = app.palette()
+    palette.setColor(QPalette.ColorRole.ToolTipBase, QColor("#ffffff"))
+    palette.setColor(QPalette.ColorRole.ToolTipText, QColor("#1a2332"))
+    palette.setColor(QPalette.ColorRole.Window, QColor("#eef1f5"))
+    palette.setColor(QPalette.ColorRole.WindowText, QColor("#1a2332"))
+    palette.setColor(QPalette.ColorRole.Base, QColor("#ffffff"))
+    palette.setColor(QPalette.ColorRole.Text, QColor("#1a2332"))
+    palette.setColor(QPalette.ColorRole.Button, QColor("#f4f6f8"))
+    palette.setColor(QPalette.ColorRole.ButtonText, QColor("#1a2332"))
+    palette.setColor(QPalette.ColorRole.Highlight, QColor("#1a4f8b"))
+    palette.setColor(QPalette.ColorRole.HighlightedText, QColor("#ffffff"))
+    app.setPalette(palette)
+
+
+def style_date_edit(widget: QDateEdit) -> None:
+    """Tarih seçici takvimini açık temaya zorlar."""
+    cal = widget.calendarWidget()
+    cal.setFirstDayOfWeek(Qt.DayOfWeek.Monday)
+    pal = cal.palette()
+    pal.setColor(QPalette.ColorRole.Window, QColor("#ffffff"))
+    pal.setColor(QPalette.ColorRole.WindowText, QColor("#1a2332"))
+    pal.setColor(QPalette.ColorRole.Base, QColor("#ffffff"))
+    pal.setColor(QPalette.ColorRole.Text, QColor("#1a2332"))
+    pal.setColor(QPalette.ColorRole.Button, QColor("#f4f6f8"))
+    pal.setColor(QPalette.ColorRole.ButtonText, QColor("#1a2332"))
+    pal.setColor(QPalette.ColorRole.Highlight, QColor("#1a4f8b"))
+    pal.setColor(QPalette.ColorRole.HighlightedText, QColor("#ffffff"))
+    cal.setPalette(pal)

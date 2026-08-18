@@ -65,11 +65,13 @@ def _run_gui(cli: argparse.Namespace) -> int:
     from kurum_yedekleme.db.errors import DatabaseError
     from kurum_yedekleme.services.runtime import build_runtime
     from kurum_yedekleme.ui.main_window import MainWindow
+    from kurum_yedekleme.ui.theme import apply_app_theme
     from kurum_yedekleme.utils.logging_setup import setup_logging
     from kurum_yedekleme.utils.paths import get_bundle_root, get_project_root
 
     test_mode = _is_test_mode(cli)
     qt_app = QApplication([sys.argv[0]])
+    apply_app_theme(qt_app)
     title = f"{__app_name__} [TEST MODE]" if test_mode else __app_name__
     qt_app.setApplicationName(title)
     qt_app.setApplicationVersion(__version__)
@@ -157,10 +159,12 @@ def _run_smoke_gui() -> int:
         seed_test_areas,
     )
     from kurum_yedekleme.ui.main_window import MainWindow
+    from kurum_yedekleme.ui.theme import apply_app_theme
     from kurum_yedekleme.utils.logging_setup import setup_logging
     from kurum_yedekleme.utils.paths import get_project_root
 
     qt_app = QApplication([sys.argv[0]])
+    apply_app_theme(qt_app)
     qt_app.setQuitOnLastWindowClosed(True)
     paths = ensure_test_directories()
     generate_test_source_data(paths, force=False)
