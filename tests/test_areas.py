@@ -67,26 +67,6 @@ def test_multiple_areas(runtime, tmp_path):
     assert len(enabled) == 3
 
 
-def test_scan_common_root(runtime, tmp_path):
-    root = tmp_path / "OrtakAlan"
-    for name in ("Helal Akreditasyon", "Personel", "Eski Birim"):
-        (root / name).mkdir(parents=True)
-        (root / name / "a.txt").write_text("x", encoding="utf-8")
-    scanned = runtime.areas.scan_common_root(root)
-    assert {s.name for s in scanned} == {
-        "Helal Akreditasyon",
-        "Personel",
-        "Eski Birim",
-    }
-    added, skipped = runtime.areas.add_scanned(
-        [s for s in scanned if s.name != "Eski Birim"]
-    )
-    assert len(added) == 2
-    assert skipped == []
-    names = {a.name for a in runtime.areas.list_areas()}
-    assert "Eski Birim" not in names
-
-
 def test_reuse_name_after_soft_delete(runtime, area_source):
     area = runtime.areas.add_area(name="Personel", source_path=str(area_source))
     old_id = area.id

@@ -2,9 +2,7 @@
 
 from __future__ import annotations
 
-from pathlib import Path
-
-from PySide6.QtCore import Qt, Signal
+from PySide6.QtCore import Signal
 from PySide6.QtWidgets import (
     QAbstractItemView,
     QCheckBox,
@@ -16,8 +14,6 @@ from PySide6.QtWidgets import (
     QHeaderView,
     QLabel,
     QLineEdit,
-    QListWidget,
-    QListWidgetItem,
     QMessageBox,
     QPushButton,
     QTableWidget,
@@ -27,7 +23,7 @@ from PySide6.QtWidgets import (
 )
 
 from kurum_yedekleme.db.models import BackupArea, BackupHistoryRecord
-from kurum_yedekleme.services.area_service import AreaError, AreaService, ScannedFolder
+from kurum_yedekleme.services.area_service import AreaError, AreaService
 from kurum_yedekleme.ui.widgets.page_header import PageHeader
 from kurum_yedekleme.ui.widgets.section_panel import SectionPanel
 from kurum_yedekleme.ui.widgets.status_badge import status_badge_widget
@@ -77,44 +73,6 @@ class AreaEditDialog(QDialog):
         )
 
 
-class ScanCommonDialog(QDialog):
-    def __init__(
-        self,
-        folders: list[ScannedFolder],
-        parent: QWidget | None = None,
-    ) -> None:
-        super().__init__(parent)
-        self.setWindowTitle("Ortak Alanı Tara")
-        self.resize(520, 360)
-        layout = QVBoxLayout(self)
-        layout.addWidget(QLabel("Yedekleme alanı olarak eklenecek klasörleri seçin:"))
-        self._list = QListWidget()
-        for folder in folders:
-            item = QListWidgetItem(f"{folder.name}  —  {folder.path}")
-            item.setCheckState(Qt.CheckState.Checked)
-            item.setData(32, folder)
-            self._list.addItem(item)
-        layout.addWidget(self._list)
-        buttons = QDialogButtonBox(
-            QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel
-        )
-        buttons.accepted.connect(self.accept)
-        buttons.rejected.connect(self.reject)
-        layout.addWidget(buttons)
-
-    def selected(self) -> list[ScannedFolder]:
-        from PySide6.QtCore import Qt
-
-        chosen: list[ScannedFolder] = []
-        for row in range(self._list.count()):
-            item = self._list.item(row)
-            if item.checkState() == Qt.CheckState.Checked:
-                folder = item.data(32)
-                if isinstance(folder, ScannedFolder):
-                    chosen.append(folder)
-        return chosen
-
-
 class AreasPage(QWidget):
     areas_changed = Signal()
 
@@ -133,7 +91,7 @@ class AreasPage(QWidget):
 
         header = PageHeader(
             "Yedekleme Alanları",
-            "Birim klasörlerini tanımlayın, düzenleyin veya ortak alandan toplu ekleyin.",
+            "Birim klasörlerini tanımlayın, düzenleyin veya kaldırın.",
         )
         layout.addWidget(header)
 
@@ -141,11 +99,7 @@ class AreasPage(QWidget):
         add_btn = QPushButton("Yeni Alan Ekle")
         add_btn.setObjectName("PrimaryButton")
         add_btn.clicked.connect(self._add)
-        scan_btn = QPushButton("Ortak Alanı Tara")
-        scan_btn.setObjectName("SecondaryButton")
-        scan_btn.clicked.connect(self._scan)
         btns.addWidget(add_btn)
-        btns.addWidget(scan_btn)
         btns.addStretch(1)
         layout.addLayout(btns)
 
@@ -279,28 +233,5 @@ class AreasPage(QWidget):
         except AreaError as exc:
             QMessageBox.warning(self, "Alan", str(exc))
             return
-        self.refresh()
-        self.areas_changed.emit()
-
-    def _scan(self) -> None:
-        path = QFileDialog.getExistingDirectory(self, "Ortak Alan Klasörü Seç")
-        if not path:
-            return
-        try:
-            folders = self._areas.scan_common_root(path)
-        except AreaError as exc:
-            QMessageBox.warning(self, "Ortak Alan", str(exc))
-            return
-        if not folders:
-            QMessageBox.information(self, "Ortak Alan", "Alt klasör bulunamadı.")
-            return
-        dialog = ScanCommonDialog(folders, self)
-        if dialog.exec() != QDialog.DialogCode.Accepted:
-            return
-        added, skipped = self._areas.add_scanned(dialog.selected())
-        msg = f"{len(added)} alan eklendi."
-        if skipped:
-            msg += "\n\nAtlananlar:\n" + "\n".join(skipped[:8])
-        QMessageBox.information(self, "Ortak Alan", msg)
         self.refresh()
         self.areas_changed.emit()

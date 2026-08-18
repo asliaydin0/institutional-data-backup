@@ -1,8 +1,7 @@
-"""Yedekleme alanı iş kuralları — CRUD, doğrulama, ortak alan tarama."""
+"""Yedekleme alanı iş kuralları — CRUD ve doğrulama."""
 
 from __future__ import annotations
 
-from dataclasses import dataclass
 from pathlib import Path
 
 from kurum_yedekleme.db.areas_repository import AreasRepository
@@ -14,12 +13,6 @@ from kurum_yedekleme.utils.windows_paths import to_path
 
 class AreaError(ValueError):
     """Alan doğrulama / işlem hatası."""
-
-
-@dataclass(frozen=True)
-class ScannedFolder:
-    name: str
-    path: Path
 
 
 class AreaService:
@@ -96,44 +89,6 @@ class AreaService:
             self._repo.soft_delete(area_id)
         except DatabaseError as exc:
             raise AreaError(str(exc)) from exc
-
-    def scan_common_root(self, common_root: str | Path) -> list[ScannedFolder]:
-        root = to_path(common_root)
-        if not root.exists():
-            raise AreaError(f"Ortak alan klasörü bulunamadı: {root}")
-        if not root.is_dir():
-            raise AreaError(f"Ortak alan bir klasör değil: {root}")
-        try:
-            children = sorted(root.iterdir(), key=lambda p: p.name.lower())
-        except OSError as exc:
-            raise AreaError(f"Ortak alan okunamadı: {root} ({exc})") from exc
-        folders: list[ScannedFolder] = []
-        for child in children:
-            if not child.is_dir() or child.name.startswith("."):
-                continue
-            folders.append(ScannedFolder(name=child.name, path=child))
-        return folders
-
-    def add_scanned(
-        self,
-        folders: list[ScannedFolder],
-        *,
-        enabled: bool = True,
-    ) -> tuple[list[BackupArea], list[str]]:
-        added: list[BackupArea] = []
-        skipped: list[str] = []
-        for folder in folders:
-            try:
-                added.append(
-                    self.add_area(
-                        name=folder.name,
-                        source_path=str(folder.path),
-                        enabled=enabled,
-                    )
-                )
-            except AreaError as exc:
-                skipped.append(str(exc))
-        return added, skipped
 
     @staticmethod
     def _validate_name(name: str) -> str:

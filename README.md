@@ -81,7 +81,7 @@ GUI → Ayarlar’dan da servis kurulumu / başlatma / durdurma yapılabilir.
 | Ekran | İş |
 |-------|-----|
 | Dashboard | Servis durumu, bugünkü yedek, son otomatik/manuel, kaçırılmış yedek uyarısı |
-| Yedekleme Alanları | Yeni alan, düzenle, aktif/pasif, sil (soft), ortak alanı tara |
+| Yedekleme Alanları | Yeni alan, düzenle, aktif/pasif, sil (soft) |
 | Yedekleme | Alan seç, tam yedek, iptal |
 | Geçmiş | Alan / tür / durum / tarih filtresi |
 | Ayarlar | Saat, retry, servis |
@@ -94,10 +94,6 @@ Yedekleme Alanları → **+ Yeni Alan Ekle**
 - Alan adı (benzersiz)
 - Kaynak klasör (erişilebilir ve okunabilir olmalı)
 - Aktif / Pasif
-
-### Ortak alanı tara
-
-`\\DosyaSunucusu\OrtakAlan\` gibi bir kök seçin. Alt klasörler listelenir; istediğinizi alan olarak ekleyin. Elle alan ekleme her zaman durur.
 
 ### Alan silme
 
