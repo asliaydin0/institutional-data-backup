@@ -1,228 +1,433 @@
-"""Kurumsal arayüz teması (sade, modern)."""
+"""Kurumsal arayüz teması — resmi kurum kullanımına uygun sade görünüm."""
 
 APP_STYLESHEET = """
+/* ── Genel ───────────────────────────────────────────────────────────── */
 QMainWindow {
-    background: #f1f5f9;
+    background: #eef1f5;
 }
 QDialog {
-    background: #f8fafc;
-    color: #0f172a;
+    background: #f7f8fa;
+    color: #1a2332;
 }
 * {
     font-family: "Segoe UI", "Arial", sans-serif;
     font-size: 13px;
-    color: #0f172a;
+    color: #1a2332;
 }
+QWidget#ContentArea {
+    background: #eef1f5;
+}
+
+/* ── Kenar çubuğu ──────────────────────────────────────────────────── */
 QFrame#Sidebar {
-    background: #0f172a;
+    background: #0c2340;
     border: none;
+    border-right: 1px solid #0a1c30;
 }
 QFrame#Sidebar QLabel {
     background: transparent;
 }
+QLabel#BrandEmblem {
+    background: #1a4f8b;
+    color: #ffffff;
+    font-size: 13px;
+    font-weight: 800;
+    border-radius: 8px;
+    min-width: 42px;
+    max-width: 42px;
+    min-height: 42px;
+    max-height: 42px;
+    border: 1px solid #2a6cb8;
+}
 QLabel#BrandTitle {
     background: transparent;
-    color: #f8fafc;
-    font-size: 17px;
+    color: #ffffff;
+    font-size: 15px;
     font-weight: 700;
-    padding: 2px 4px;
+    padding: 0;
 }
 QLabel#BrandSubtitle {
     background: transparent;
-    color: #fbbf24;
+    color: #8eb4dc;
     font-size: 11px;
-    font-weight: 600;
-    padding: 2px 4px;
+    font-weight: 500;
+    padding: 0;
+}
+QLabel#BrandSubtitle[testMode="true"] {
+    color: #fca5a5;
+    font-weight: 700;
+}
+QFrame#SidebarDivider {
+    background: #1a3a5c;
+    border: none;
+    max-height: 1px;
+    min-height: 1px;
+}
+QLabel#SidebarFooter {
+    background: transparent;
+    color: #5a7a9a;
+    font-size: 11px;
+    padding: 4px 2px;
 }
 QListWidget#NavList {
     background: transparent;
     border: none;
     outline: none;
-    color: #cbd5e1;
-    padding: 8px 0;
+    color: #b8cce0;
+    padding: 4px 0;
 }
 QListWidget#NavList::item {
     background: transparent;
-    color: #cbd5e1;
-    padding: 12px 14px;
-    margin: 3px 6px;
-    border-radius: 8px;
+    color: #c8d8e8;
+    padding: 11px 14px 11px 12px;
+    margin: 2px 4px;
+    border-radius: 6px;
+    border-left: 3px solid transparent;
 }
 QListWidget#NavList::item:selected {
-    background: #1d4ed8;
+    background: rgba(255, 255, 255, 0.08);
     color: #ffffff;
     font-weight: 600;
+    border-left: 3px solid #c8102e;
 }
 QListWidget#NavList::item:hover:!selected {
-    background: #1e293b;
-    color: #f1f5f9;
+    background: rgba(255, 255, 255, 0.05);
+    color: #e8f0f8;
 }
+
+/* ── Sayfa başlıkları ──────────────────────────────────────────────── */
+QLabel#PageTitle {
+    background: transparent;
+    font-size: 22px;
+    font-weight: 700;
+    color: #0c2340;
+    letter-spacing: -0.2px;
+}
+QLabel#PageSubtitle {
+    background: transparent;
+    font-size: 13px;
+    color: #5c6b7f;
+    margin-top: 2px;
+}
+QLabel#SectionTitle {
+    background: transparent;
+    font-size: 12px;
+    font-weight: 700;
+    color: #3d4f63;
+    text-transform: uppercase;
+    letter-spacing: 0.6px;
+}
+
+/* ── Kartlar ve paneller ───────────────────────────────────────────── */
 QFrame#Card {
     background: #ffffff;
-    border: 1px solid #e2e8f0;
-    border-radius: 12px;
+    border: 1px solid #d4dae3;
+    border-radius: 8px;
+}
+QFrame#Card[accent="true"] {
+    border-left: 3px solid #1a4f8b;
+}
+QFrame#SectionPanel {
+    background: #ffffff;
+    border: 1px solid #d4dae3;
+    border-radius: 8px;
 }
 QLabel#CardTitle {
     background: transparent;
-    color: #64748b;
+    color: #5c6b7f;
     font-size: 11px;
-    font-weight: 600;
+    font-weight: 700;
     text-transform: uppercase;
-    letter-spacing: 0.4px;
+    letter-spacing: 0.5px;
 }
 QLabel#CardValue {
     background: transparent;
-    color: #0f172a;
+    color: #1a2332;
     font-size: 13px;
     font-weight: 600;
-}
-QLabel#PageTitle {
-    background: transparent;
-    font-size: 24px;
-    font-weight: 700;
-    color: #0f172a;
+    line-height: 1.4;
 }
 QLabel#Muted, QLabel#MutedLabel {
     background: transparent;
-    color: #64748b;
+    color: #5c6b7f;
+    line-height: 1.45;
 }
-QPushButton#PrimaryButton {
-    background: #1d4ed8;
-    color: white;
-    border: none;
-    border-radius: 10px;
-    padding: 10px 18px;
-    font-size: 14px;
+QLabel#StatChip {
+    background: #ffffff;
+    border: 1px solid #d4dae3;
+    border-radius: 6px;
+    padding: 7px 14px;
+    font-weight: 600;
+    color: #1a2332;
+}
+QLabel#StatChipSuccess {
+    background: #f0faf4;
+    border: 1px solid #b8e0c8;
+    border-radius: 6px;
+    padding: 7px 14px;
+    font-weight: 600;
+    color: #1a7f4b;
+}
+QLabel#StatChipFailed {
+    background: #fef2f2;
+    border: 1px solid #f5c2c2;
+    border-radius: 6px;
+    padding: 7px 14px;
+    font-weight: 600;
+    color: #b91c1c;
+}
+
+/* ── Durum rozetleri ───────────────────────────────────────────────── */
+QLabel#StatusBadgeSuccess {
+    background: #e8f5ee;
+    color: #166534;
+    border: 1px solid #b8e0c8;
+    border-radius: 4px;
+    padding: 3px 10px;
+    font-size: 11px;
     font-weight: 700;
+}
+QLabel#StatusBadgeFailed {
+    background: #fef2f2;
+    color: #991b1b;
+    border: 1px solid #f5c2c2;
+    border-radius: 4px;
+    padding: 3px 10px;
+    font-size: 11px;
+    font-weight: 700;
+}
+QLabel#StatusBadgeWarning {
+    background: #fffbeb;
+    color: #92400e;
+    border: 1px solid #fde68a;
+    border-radius: 4px;
+    padding: 3px 10px;
+    font-size: 11px;
+    font-weight: 700;
+}
+QLabel#StatusBadgeInfo {
+    background: #eff6ff;
+    color: #1e40af;
+    border: 1px solid #bfdbfe;
+    border-radius: 4px;
+    padding: 3px 10px;
+    font-size: 11px;
+    font-weight: 700;
+}
+QLabel#StatusBadgeNeutral {
+    background: #f1f3f6;
+    color: #4b5563;
+    border: 1px solid #d4dae3;
+    border-radius: 4px;
+    padding: 3px 10px;
+    font-size: 11px;
+    font-weight: 700;
+}
+
+/* ── Düğmeler ──────────────────────────────────────────────────────── */
+QPushButton#PrimaryButton {
+    background: #1a4f8b;
+    color: #ffffff;
+    border: none;
+    border-radius: 6px;
+    padding: 9px 18px;
+    font-size: 13px;
+    font-weight: 600;
     min-height: 20px;
 }
 QPushButton#PrimaryButton:hover {
-    background: #1e40af;
+    background: #163f70;
+}
+QPushButton#PrimaryButton:pressed {
+    background: #0c2340;
 }
 QPushButton#PrimaryButton:disabled {
-    background: #94a3b8;
+    background: #9aa8b8;
+    color: #e8ecf0;
 }
 QPushButton#SecondaryButton {
-    background: #e2e8f0;
-    color: #0f172a;
-    border: none;
-    border-radius: 8px;
-    padding: 10px 14px;
+    background: #ffffff;
+    color: #1a2332;
+    border: 1px solid #c5cdd8;
+    border-radius: 6px;
+    padding: 9px 14px;
     font-weight: 600;
     min-height: 20px;
 }
 QPushButton#SecondaryButton:hover {
-    background: #cbd5e1;
+    background: #f4f6f8;
+    border-color: #9aa8b8;
 }
 QPushButton#SecondaryButton:disabled {
-    color: #94a3b8;
-    background: #f1f5f9;
+    color: #9aa8b8;
+    background: #f4f6f8;
+    border-color: #e2e6ec;
 }
 QPushButton#DangerButton {
-    background: #fee2e2;
-    color: #991b1b;
-    border: none;
-    border-radius: 8px;
-    padding: 8px 14px;
+    background: #ffffff;
+    color: #b91c1c;
+    border: 1px solid #f5c2c2;
+    border-radius: 6px;
+    padding: 7px 14px;
     font-weight: 600;
 }
-QProgressBar {
-    border: 1px solid #e2e8f0;
-    border-radius: 8px;
-    background: #e2e8f0;
-    text-align: center;
+QPushButton#DangerButton:hover {
+    background: #fef2f2;
+    border-color: #ef9a9a;
+}
+
+/* ── Form öğeleri ──────────────────────────────────────────────────── */
+QLineEdit, QComboBox, QDateEdit {
+    background: #ffffff;
+    border: 1px solid #c5cdd8;
+    border-radius: 6px;
+    padding: 6px 10px;
+    color: #1a2332;
     min-height: 18px;
-    max-height: 18px;
-    color: #0f172a;
 }
-QProgressBar::chunk {
-    background: #2563eb;
-    border-radius: 7px;
+QLineEdit:focus, QComboBox:focus, QDateEdit:focus,
+QSpinBox:focus, QTimeEdit:focus {
+    border-color: #1a4f8b;
 }
-QTableWidget {
-    background: #ffffff;
-    border: 1px solid #e2e8f0;
-    border-radius: 8px;
-    gridline-color: #f1f5f9;
-    alternate-background-color: #f8fafc;
-}
-QHeaderView::section {
-    background: #f8fafc;
-    padding: 8px 10px;
+QComboBox::drop-down {
     border: none;
-    border-bottom: 1px solid #e2e8f0;
-    border-right: 1px solid #e2e8f0;
-    font-weight: 600;
-    color: #334155;
+    width: 24px;
 }
-QLineEdit, QListWidget#SourceList, QComboBox {
+QComboBox QAbstractItemView {
     background: #ffffff;
-    border: 1px solid #cbd5e1;
-    border-radius: 8px;
-    padding: 6px 8px;
-    color: #0f172a;
+    border: 1px solid #d4dae3;
+    selection-background-color: #e8f0fa;
+    selection-color: #0c2340;
 }
-/* Spin/Time: agresif padding ok tıklamasını bozar; subcontrol ile düzeltilir */
+QCheckBox {
+    spacing: 8px;
+    color: #1a2332;
+}
+QCheckBox::indicator {
+    width: 16px;
+    height: 16px;
+    border-radius: 3px;
+    border: 1px solid #c5cdd8;
+    background: #ffffff;
+}
+QCheckBox::indicator:checked {
+    background: #1a4f8b;
+    border-color: #1a4f8b;
+}
 QSpinBox, QTimeEdit {
     background: #ffffff;
-    border: 1px solid #cbd5e1;
+    border: 1px solid #c5cdd8;
     border-radius: 6px;
-    color: #0f172a;
+    color: #1a2332;
     min-height: 30px;
     padding-left: 8px;
     padding-right: 2px;
-    selection-background-color: #bfdbfe;
+    selection-background-color: #cfe0f5;
 }
 QSpinBox::up-button, QTimeEdit::up-button {
     subcontrol-origin: border;
     subcontrol-position: top right;
-    width: 24px;
+    width: 22px;
     border: none;
-    border-left: 1px solid #cbd5e1;
-    background-color: #e2e8f0;
+    border-left: 1px solid #c5cdd8;
+    background-color: #f4f6f8;
 }
 QSpinBox::down-button, QTimeEdit::down-button {
     subcontrol-origin: border;
     subcontrol-position: bottom right;
-    width: 24px;
+    width: 22px;
     border: none;
-    border-left: 1px solid #cbd5e1;
-    border-top: 1px solid #cbd5e1;
-    background-color: #e2e8f0;
+    border-left: 1px solid #c5cdd8;
+    border-top: 1px solid #c5cdd8;
+    background-color: #f4f6f8;
 }
 QSpinBox::up-button:hover, QTimeEdit::up-button:hover,
 QSpinBox::down-button:hover, QTimeEdit::down-button:hover {
-    background-color: #cbd5e1;
+    background-color: #e8ecf0;
 }
-QSpinBox::up-button:pressed, QTimeEdit::up-button:pressed,
-QSpinBox::down-button:pressed, QTimeEdit::down-button:pressed {
-    background-color: #94a3b8;
+
+/* ── Tablolar ──────────────────────────────────────────────────────── */
+QTableWidget {
+    background: #ffffff;
+    border: 1px solid #d4dae3;
+    border-radius: 8px;
+    gridline-color: #eef1f5;
+    alternate-background-color: #f7f8fa;
+    selection-background-color: #e8f0fa;
+    selection-color: #0c2340;
 }
-QSpinBox::up-arrow, QTimeEdit::up-arrow {
-    width: 10px;
-    height: 10px;
+QHeaderView::section {
+    background: #f4f6f8;
+    padding: 9px 12px;
+    border: none;
+    border-bottom: 2px solid #d4dae3;
+    border-right: 1px solid #e8ecf0;
+    font-weight: 700;
+    font-size: 11px;
+    color: #3d4f63;
+    text-transform: uppercase;
+    letter-spacing: 0.3px;
 }
-QSpinBox::down-arrow, QTimeEdit::down-arrow {
-    width: 10px;
-    height: 10px;
+QTableWidget::item {
+    padding: 4px 6px;
+}
+
+/* ── İlerleme ve durum çubuğu ──────────────────────────────────────── */
+QProgressBar {
+    border: 1px solid #d4dae3;
+    border-radius: 6px;
+    background: #eef1f5;
+    text-align: center;
+    min-height: 18px;
+    max-height: 18px;
+    color: #1a2332;
+    font-size: 11px;
+    font-weight: 600;
+}
+QProgressBar::chunk {
+    background: #1a4f8b;
+    border-radius: 5px;
 }
 QStatusBar {
-    background: #e2e8f0;
-    color: #334155;
+    background: #e2e6ec;
+    color: #3d4f63;
+    border-top: 1px solid #d4dae3;
+    font-size: 12px;
 }
+QStatusBar::item {
+    border: none;
+}
+
+/* ── Log görüntüleyici ─────────────────────────────────────────────── */
+QTextEdit {
+    background: #ffffff;
+    border: 1px solid #d4dae3;
+    border-radius: 8px;
+    color: #1a2332;
+}
+
+/* ── Test modu ─────────────────────────────────────────────────────── */
 QLabel#TestModeBanner {
     background: #7f1d1d;
     color: #fef2f2;
-    font-size: 14px;
-    font-weight: 800;
+    font-size: 13px;
+    font-weight: 700;
     padding: 10px 16px;
-    border-radius: 10px;
-    letter-spacing: 0.3px;
+    border-radius: 6px;
+    border: 1px solid #991b1b;
+    letter-spacing: 0.2px;
 }
-QTextEdit {
-    background: #ffffff;
-    border: 1px solid #e2e8f0;
-    border-radius: 8px;
-    color: #0f172a;
+
+/* ── Hakkında sayfası ──────────────────────────────────────────────── */
+QLabel#AboutVersion {
+    background: transparent;
+    font-size: 15px;
+    font-weight: 700;
+    color: #0c2340;
+}
+QLabel#AboutCredit {
+    background: transparent;
+    font-size: 11px;
+    color: #8b97a8;
 }
 """

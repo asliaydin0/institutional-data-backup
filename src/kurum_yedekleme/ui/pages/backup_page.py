@@ -14,7 +14,9 @@ from PySide6.QtWidgets import (
 
 from kurum_yedekleme.core.progress import BackupProgressEvent
 from kurum_yedekleme.db.models import BackupArea
+from kurum_yedekleme.ui.widgets.page_header import PageHeader
 from kurum_yedekleme.ui.widgets.progress_panel import ProgressPanel
+from kurum_yedekleme.ui.widgets.section_panel import SectionPanel
 
 
 class BackupPage(QWidget):
@@ -24,25 +26,27 @@ class BackupPage(QWidget):
     def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
         layout = QVBoxLayout(self)
-        layout.setContentsMargins(20, 16, 20, 16)
-        title = QLabel("Yedekleme")
-        title.setObjectName("PageTitle")
-        layout.addWidget(title)
-        info = QLabel(
-            "Manuel yedekleme bu pencerede çalışır. "
-            "Otomatik yedekleme Windows Service tarafından yapılır. "
-            "Kaynak dosyalar yalnızca okunur."
-        )
-        info.setObjectName("Muted")
-        info.setWordWrap(True)
-        layout.addWidget(info)
+        layout.setContentsMargins(24, 20, 24, 20)
+        layout.setSpacing(16)
 
+        layout.addWidget(
+            PageHeader(
+                "Yedekleme",
+                "Manuel yedekleme bu ekrandan başlatılır. "
+                "Otomatik yedekleme Windows Service tarafından yürütülür.",
+            )
+        )
+
+        areas_panel = SectionPanel("Yedeklenecek Alanlar")
         self._checks: list[QCheckBox] = []
         self._box = QVBoxLayout()
-        layout.addLayout(self._box)
+        self._box.setSpacing(8)
+        areas_panel.add_layout(self._box)
+        layout.addWidget(areas_panel)
 
         row = QHBoxLayout()
-        self.select_all_btn = QPushButton("Tam Yedekleme")
+        row.setSpacing(8)
+        self.select_all_btn = QPushButton("Tümünü Seç")
         self.select_all_btn.setObjectName("SecondaryButton")
         self.select_all_btn.clicked.connect(self._select_all_enabled)
         self.backup_btn = QPushButton("Seçili Alanları Yedekle")
@@ -63,17 +67,24 @@ class BackupPage(QWidget):
         layout.addStretch(1)
 
     def set_areas(self, areas: list[BackupArea]) -> None:
-        while self._checks:
-            box = self._checks.pop()
-            self._box.removeWidget(box)
-            box.deleteLater()
+        while self._box.count():
+            item = self._box.takeAt(0)
+            widget = item.widget()
+            if widget is not None:
+                widget.deleteLater()
+        self._checks.clear()
+        if not areas:
+            empty = QLabel("Henüz tanımlı yedekleme alanı yok.")
+            empty.setObjectName("Muted")
+            self._box.addWidget(empty)
+            return
         for area in areas:
             box = QCheckBox(f"{area.name}  —  {area.source_path}")
             box.setProperty("area_id", area.id)
             box.setEnabled(area.enabled)
             box.setChecked(area.enabled)
             if not area.enabled:
-                box.setText(box.text() + " [pasif]")
+                box.setText(box.text() + "  [pasif]")
             self._box.addWidget(box)
             self._checks.append(box)
 

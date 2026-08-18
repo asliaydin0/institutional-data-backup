@@ -18,6 +18,8 @@ from PySide6.QtWidgets import (
 )
 
 from kurum_yedekleme.utils.logging_setup import LOG_FILE_NAME
+from kurum_yedekleme.ui.widgets.page_header import PageHeader
+from kurum_yedekleme.ui.widgets.section_panel import SectionPanel
 
 
 class LogsPage(QWidget):
@@ -43,12 +45,15 @@ class LogsPage(QWidget):
         )
 
         layout = QVBoxLayout(self)
-        layout.setContentsMargins(20, 16, 20, 16)
-        layout.setSpacing(10)
+        layout.setContentsMargins(24, 20, 24, 20)
+        layout.setSpacing(16)
 
-        heading = QLabel("Loglar")
-        heading.setObjectName("PageTitle")
-        layout.addWidget(heading)
+        layout.addWidget(
+            PageHeader(
+                "Loglar",
+                "Uygulama ve servis kayıtları. Hassas bilgiler maskelenmiştir.",
+            )
+        )
 
         hint = QLabel(
             "Klasör: logs/ — satır biçimi: Tarih Saat SEVİYE Modül İşlem - Mesaj"
@@ -56,7 +61,9 @@ class LogsPage(QWidget):
         hint.setObjectName("MutedLabel")
         layout.addWidget(hint)
 
+        toolbar_panel = SectionPanel("Görüntüleme")
         toolbar = QHBoxLayout()
+        toolbar.setSpacing(10)
         toolbar.addWidget(QLabel("Dosya:"))
         self._file_combo = QComboBox()
         self._file_combo.setMinimumWidth(260)
@@ -86,8 +93,10 @@ class LogsPage(QWidget):
         self._auto.setCheckable(True)
         self._auto.toggled.connect(self._on_auto_toggled)
         toolbar.addWidget(self._auto)
-        layout.addLayout(toolbar)
+        toolbar_panel.add_layout(toolbar)
+        layout.addWidget(toolbar_panel)
 
+        viewer_panel = SectionPanel("Kayıt İçeriği")
         self._viewer = QTextEdit()
         self._viewer.setReadOnly(True)
         mono = QFont("Cascadia Mono")
@@ -96,7 +105,8 @@ class LogsPage(QWidget):
         mono.setStyleHint(QFont.StyleHint.Monospace)
         mono.setPointSize(10)
         self._viewer.setFont(mono)
-        layout.addWidget(self._viewer)
+        viewer_panel.add_widget(self._viewer)
+        layout.addWidget(viewer_panel, stretch=1)
 
         self._status = QLabel("")
         self._status.setObjectName("MutedLabel")

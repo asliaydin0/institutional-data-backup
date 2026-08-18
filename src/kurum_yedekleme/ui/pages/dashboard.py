@@ -1,4 +1,4 @@
-"""Dashboard — servis ve günlük yedek özeti."""
+"""Genel bakış — servis ve günlük yedek özeti."""
 
 from __future__ import annotations
 
@@ -23,7 +23,13 @@ from kurum_yedekleme.core.progress import BackupProgressEvent
 from kurum_yedekleme.db.models import BackupHistoryRecord, BackupStatus
 from kurum_yedekleme.services.windows_service import ServiceStatus
 from kurum_yedekleme.ui.widgets.info_card import InfoCard
+from kurum_yedekleme.ui.widgets.page_header import PageHeader
 from kurum_yedekleme.ui.widgets.progress_panel import ProgressPanel
+from kurum_yedekleme.ui.widgets.section_panel import SectionPanel
+from kurum_yedekleme.ui.widgets.status_badge import (
+    backup_status_kind,
+    status_badge_widget,
+)
 from kurum_yedekleme.utils.formatting import format_bytes
 
 
@@ -34,39 +40,38 @@ class DashboardPage(QWidget):
     def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
         root = QVBoxLayout(self)
-        root.setContentsMargins(20, 16, 20, 16)
-        root.setSpacing(14)
+        root.setContentsMargins(24, 20, 24, 20)
+        root.setSpacing(16)
 
-        self._test_banner = QLabel("⚠ TEST MODU AKTİF")
+        self._test_banner = QLabel("TEST MODU — Üretim ortamı ayarları uygulanmaz")
         self._test_banner.setObjectName("TestModeBanner")
         self._test_banner.setVisible(False)
         root.addWidget(self._test_banner)
 
-        header = QHBoxLayout()
-        title = QLabel("Dashboard")
-        title.setObjectName("PageTitle")
-        header.addWidget(title)
-        header.addStretch(1)
+        header = PageHeader(
+            "Genel Bakış",
+            "Sistem durumu, otomatik yedekleme ve son işlemlerin özeti.",
+        )
         self.preflight_btn = QPushButton("Yapılandırmayı Test Et")
         self.preflight_btn.setObjectName("SecondaryButton")
         self.preflight_btn.clicked.connect(self.preflight_requested.emit)
         self.backup_btn = QPushButton("Şimdi Yedekle")
         self.backup_btn.setObjectName("PrimaryButton")
         self.backup_btn.clicked.connect(self.backup_requested.emit)
-        header.addWidget(self.preflight_btn)
-        header.addWidget(self.backup_btn)
-        root.addLayout(header)
+        header.add_action(self.preflight_btn)
+        header.add_action(self.backup_btn)
+        root.addWidget(header)
 
         grid = QGridLayout()
         grid.setSpacing(12)
         self.card_service = InfoCard("Windows Service", "—")
-        self.card_auto = InfoCard("Otomatik yedekleme", "—")
-        self.card_today = InfoCard("Bugünkü yedek", "—")
-        self.card_last_auto = InfoCard("Son otomatik yedek", "—")
-        self.card_last_manual = InfoCard("Son manuel yedek", "—")
-        self.card_areas = InfoCard("Aktif alanlar", "—")
-        self.card_last_area = InfoCard("Son yedeklenen alan", "—")
-        self.card_error = InfoCard("Son hata", "—")
+        self.card_auto = InfoCard("Otomatik Yedekleme", "—")
+        self.card_today = InfoCard("Bugünkü Yedek", "—")
+        self.card_last_auto = InfoCard("Son Otomatik Yedek", "—")
+        self.card_last_manual = InfoCard("Son Manuel Yedek", "—")
+        self.card_areas = InfoCard("Aktif Alanlar", "—")
+        self.card_last_area = InfoCard("Son Yedeklenen Alan", "—")
+        self.card_error = InfoCard("Son Hata", "—")
         cards = [
             self.card_service,
             self.card_auto,
@@ -84,9 +89,7 @@ class DashboardPage(QWidget):
         self.progress = ProgressPanel()
         root.addWidget(self.progress)
 
-        hist_title = QLabel("Son kayıtlar")
-        hist_title.setObjectName("CardTitle")
-        root.addWidget(hist_title)
+        history_section = SectionPanel("Son Kayıtlar")
         self.history_table = QTableWidget(0, 5)
         self.history_table.setHorizontalHeaderLabels(
             ["Tarih", "Alan", "Tür", "Durum", "Boyut"]
@@ -96,11 +99,14 @@ class DashboardPage(QWidget):
             QAbstractItemView.EditTrigger.NoEditTriggers
         )
         self.history_table.verticalHeader().setVisible(False)
+        self.history_table.setShowGrid(False)
         header_view = self.history_table.horizontalHeader()
         header_view.setSectionResizeMode(0, QHeaderView.ResizeMode.ResizeToContents)
         header_view.setSectionResizeMode(1, QHeaderView.ResizeMode.Stretch)
-        self.history_table.setMaximumHeight(220)
-        root.addWidget(self.history_table)
+        self.history_table.setMinimumHeight(180)
+        self.history_table.setMaximumHeight(240)
+        history_section.add_widget(self.history_table)
+        root.addWidget(history_section)
         root.addStretch(1)
 
         self.status_card = self.card_service
@@ -135,15 +141,15 @@ class DashboardPage(QWidget):
         recent: list[BackupHistoryRecord],
     ) -> None:
         self.card_service.set_value(service.label_tr)
-        auto_text = f"{'Açık' if schedule_enabled else 'Kapalı'} @ {schedule_time}"
+        auto_text = f"{'Açık' if schedule_enabled else 'Kapalı'} — {schedule_time}"
         if next_run is not None:
             auto_text += f"\nSonraki: {next_run.strftime('%d.%m.%Y %H:%M')}"
         if missed:
-            auto_text += "\nBugünün otomatik yedeklemesi henüz yapılmadı."
+            auto_text += "\nPlanlanan yedek henüz alınmadı."
         if service.state != "running" and schedule_enabled:
             if self._test_mode:
                 auto_text += (
-                    "\nTEST MODU — otomatik yedek bu pencere açıkken çalışır."
+                    "\nTest modu — otomatik yedek pencere açıkken çalışır."
                 )
             else:
                 auto_text += "\nServis kapalı — otomatik yedek çalışmaz."
@@ -183,12 +189,18 @@ class DashboardPage(QWidget):
             self.history_table.setItem(
                 row, 2, QTableWidgetItem(record.backup_type.label_tr)
             )
-            self.history_table.setItem(
-                row, 3, QTableWidgetItem(record.status.label_tr)
+            self.history_table.setCellWidget(
+                row,
+                3,
+                status_badge_widget(
+                    record.status.label_tr,
+                    backup_status_kind(record.status),
+                ),
             )
             self.history_table.setItem(
                 row, 4, QTableWidgetItem(format_bytes(record.file_size))
             )
+            self.history_table.setRowHeight(row, 40)
 
 
 def _record_summary(record: Optional[BackupHistoryRecord]) -> str:

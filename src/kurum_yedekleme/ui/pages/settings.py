@@ -31,6 +31,8 @@ from kurum_yedekleme.services.windows_service import (
     start_service,
     stop_service,
 )
+from kurum_yedekleme.ui.widgets.page_header import PageHeader
+from kurum_yedekleme.ui.widgets.section_panel import SectionPanel
 
 
 class SettingsPage(QWidget):
@@ -44,12 +46,17 @@ class SettingsPage(QWidget):
         super().__init__(parent)
         self._settings = settings
         layout = QVBoxLayout(self)
-        layout.setContentsMargins(20, 16, 20, 16)
+        layout.setContentsMargins(24, 20, 24, 20)
+        layout.setSpacing(16)
 
-        title = QLabel("Ayarlar")
-        title.setObjectName("PageTitle")
-        layout.addWidget(title)
+        layout.addWidget(
+            PageHeader(
+                "Ayarlar",
+                "Yedekleme zamanlaması, saklama politikası ve Windows Service yönetimi.",
+            )
+        )
 
+        general_panel = SectionPanel("Genel")
         form = QFormLayout()
         self._root = QLineEdit(settings.backup_root)
         self._root.setReadOnly(True)
@@ -132,9 +139,8 @@ class SettingsPage(QWidget):
         form.addRow("Ayın günü:", self._retention_dom)
 
         self._form = form
-        layout.addLayout(form)
-        self._sync_schedule_fields()
-        self._sync_retention_fields()
+        general_panel.add_layout(form)
+        layout.addWidget(general_panel)
 
         self._hint = QLabel(
             "Otomatik yedekleme ve eski ZIP temizliği Windows Service tarafından "
@@ -145,9 +151,12 @@ class SettingsPage(QWidget):
         self._hint.setWordWrap(True)
         layout.addWidget(self._hint)
 
+        service_panel = SectionPanel("Windows Service")
+        svc_layout = QVBoxLayout()
         self._svc_label = QLabel("Servis: —")
-        layout.addWidget(self._svc_label)
+        svc_layout.addWidget(self._svc_label)
         svc_row = QHBoxLayout()
+        svc_row.setSpacing(8)
         self._svc_install = QPushButton("Servisi Kur")
         self._svc_start = QPushButton("Servisi Başlat")
         self._svc_stop = QPushButton("Servisi Durdur")
@@ -161,17 +170,21 @@ class SettingsPage(QWidget):
             btn.setObjectName("SecondaryButton")
             svc_row.addWidget(btn)
         svc_row.addStretch(1)
-        layout.addLayout(svc_row)
-        self._svc_install.clicked.connect(self._install_service)
-        self._svc_start.clicked.connect(self._start_service)
-        self._svc_stop.clicked.connect(self._stop_service)
-        self._svc_remove.clicked.connect(self._remove_service)
+        svc_layout.addLayout(svc_row)
+        service_panel.add_layout(svc_layout)
+        layout.addWidget(service_panel)
 
         self._save_btn = QPushButton("Ayarları Kaydet")
         self._save_btn.setObjectName("PrimaryButton")
         self._save_btn.clicked.connect(self._on_save)
         layout.addWidget(self._save_btn)
         layout.addStretch(1)
+        self._svc_install.clicked.connect(self._install_service)
+        self._svc_start.clicked.connect(self._start_service)
+        self._svc_stop.clicked.connect(self._stop_service)
+        self._svc_remove.clicked.connect(self._remove_service)
+        self._sync_schedule_fields()
+        self._sync_retention_fields()
         self._test_mode = False
         self.refresh_service_status()
 

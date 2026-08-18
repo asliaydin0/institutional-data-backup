@@ -5,7 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Optional
 
-from PySide6.QtCore import QTimer
+from PySide6.QtCore import Qt, QTimer
 from PySide6.QtGui import QCloseEvent
 from PySide6.QtWidgets import (
     QApplication,
@@ -41,7 +41,7 @@ from kurum_yedekleme.ui.tray import SystemTrayManager, TrayStatus
 from kurum_yedekleme.ui.workers.backup_worker import BackupWorker
 
 _NAV_ITEMS = (
-    "Dashboard",
+    "Genel Bakış",
     "Yedekleme Alanları",
     "Yedekleme",
     "Geçmiş",
@@ -81,19 +81,38 @@ class MainWindow(QMainWindow):
 
         sidebar = QFrame()
         sidebar.setObjectName("Sidebar")
-        sidebar.setFixedWidth(220)
+        sidebar.setFixedWidth(236)
         side_layout = QVBoxLayout(sidebar)
-        side_layout.setContentsMargins(12, 20, 12, 16)
+        side_layout.setContentsMargins(16, 20, 16, 16)
+        side_layout.setSpacing(0)
+
+        brand_row = QHBoxLayout()
+        brand_row.setSpacing(12)
+        emblem = QLabel("KY")
+        emblem.setObjectName("BrandEmblem")
+        emblem.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        brand_col = QVBoxLayout()
+        brand_col.setSpacing(2)
         brand = QLabel(__app_name__)
         brand.setObjectName("BrandTitle")
         brand.setWordWrap(True)
         sub = QLabel(
-            "⚠ TEST MODU AKTİF" if self._test_mode else "Kurumsal yedekleme"
+            "TEST MODU" if self._test_mode else "Kurumsal Yedekleme Sistemi"
         )
         sub.setObjectName("BrandSubtitle")
-        side_layout.addWidget(brand)
-        side_layout.addWidget(sub)
+        if self._test_mode:
+            sub.setProperty("testMode", True)
+        brand_col.addWidget(brand)
+        brand_col.addWidget(sub)
+        brand_row.addWidget(emblem)
+        brand_row.addLayout(brand_col, stretch=1)
+        side_layout.addLayout(brand_row)
+
+        divider = QFrame()
+        divider.setObjectName("SidebarDivider")
         side_layout.addSpacing(16)
+        side_layout.addWidget(divider)
+        side_layout.addSpacing(12)
 
         self._nav = QListWidget()
         self._nav.setObjectName("NavList")
@@ -101,7 +120,17 @@ class MainWindow(QMainWindow):
             QListWidgetItem(label, self._nav)
         self._nav.setCurrentRow(0)
         side_layout.addWidget(self._nav, stretch=1)
+
+        footer = QLabel(f"Sürüm {__version__}")
+        footer.setObjectName("SidebarFooter")
+        side_layout.addWidget(footer)
         root_layout.addWidget(sidebar)
+
+        content = QFrame()
+        content.setObjectName("ContentArea")
+        content_layout = QVBoxLayout(content)
+        content_layout.setContentsMargins(0, 0, 0, 0)
+        content_layout.setSpacing(0)
 
         self._dashboard = DashboardPage()
         self._dashboard.set_test_mode(self._test_mode)
@@ -134,7 +163,8 @@ class MainWindow(QMainWindow):
             self._about_page,
         ):
             self._stack.addWidget(page)
-        root_layout.addWidget(self._stack, stretch=1)
+        content_layout.addWidget(self._stack)
+        root_layout.addWidget(content, stretch=1)
         self._nav.currentRowChanged.connect(self._on_nav_changed)
 
         self._tray = SystemTrayManager(self)

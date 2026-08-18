@@ -22,6 +22,12 @@ from PySide6.QtWidgets import (
 
 from kurum_yedekleme.db.models import BackupArea, BackupStatus, BackupType
 from kurum_yedekleme.services.history_service import HistoryService
+from kurum_yedekleme.ui.widgets.page_header import PageHeader
+from kurum_yedekleme.ui.widgets.section_panel import SectionPanel
+from kurum_yedekleme.ui.widgets.status_badge import (
+    backup_status_kind,
+    status_badge_widget,
+)
 from kurum_yedekleme.utils.formatting import format_bytes
 from kurum_yedekleme.utils.windows_paths import reveal_in_file_manager
 
@@ -47,22 +53,34 @@ class HistoryPage(QWidget):
         self._areas: list[BackupArea] = []
 
         layout = QVBoxLayout(self)
-        layout.setContentsMargins(20, 16, 20, 16)
-        heading = QLabel("Geçmiş")
-        heading.setObjectName("PageTitle")
-        layout.addWidget(heading)
+        layout.setContentsMargins(24, 20, 24, 20)
+        layout.setSpacing(16)
+
+        layout.addWidget(
+            PageHeader(
+                "Geçmiş",
+                "Yedekleme kayıtlarını filtreleyin. "
+                "Yedek dosyasının klasörünü açmak için satıra çift tıklayın.",
+            )
+        )
 
         summary = QHBoxLayout()
-        self._lbl_total = QLabel("Toplam: -")
-        self._lbl_success = QLabel("Başarılı: -")
-        self._lbl_failed = QLabel("Başarısız: -")
+        summary.setSpacing(10)
+        self._lbl_total = QLabel("Toplam: —")
+        self._lbl_total.setObjectName("StatChip")
+        self._lbl_success = QLabel("Başarılı: —")
+        self._lbl_success.setObjectName("StatChipSuccess")
+        self._lbl_failed = QLabel("Başarısız: —")
+        self._lbl_failed.setObjectName("StatChipFailed")
         summary.addWidget(self._lbl_total)
         summary.addWidget(self._lbl_success)
         summary.addWidget(self._lbl_failed)
         summary.addStretch(1)
         layout.addLayout(summary)
 
+        filter_panel = SectionPanel("Filtreler")
         filters = QHBoxLayout()
+        filters.setSpacing(10)
         self._area_combo = QComboBox()
         self._type_combo = QComboBox()
         self._type_combo.addItems(["Tümü", "Manuel", "Otomatik"])
@@ -88,8 +106,11 @@ class HistoryPage(QWidget):
         filters.addWidget(QLabel("Bitiş:"))
         filters.addWidget(self._to)
         filters.addWidget(apply_btn)
-        layout.addLayout(filters)
+        filters.addStretch(1)
+        filter_panel.add_layout(filters)
+        layout.addWidget(filter_panel)
 
+        table_panel = SectionPanel("Kayıtlar")
         self._table = QTableWidget(0, 6)
         self._table.setHorizontalHeaderLabels(
             ["Tarih", "Alan", "Tür", "Boyut", "Süre", "Durum"]
@@ -98,14 +119,13 @@ class HistoryPage(QWidget):
         self._table.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
         self._table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
         self._table.verticalHeader().setVisible(False)
-        self._table.setToolTip(
-            "Yedek dosyasının klasörünü açmak için bir satıra çift tıklayın."
-        )
+        self._table.setShowGrid(False)
         self._table.cellDoubleClicked.connect(self._on_row_activated)
         header = self._table.horizontalHeader()
         header.setStretchLastSection(True)
         header.setSectionResizeMode(1, QHeaderView.ResizeMode.Stretch)
-        layout.addWidget(self._table)
+        table_panel.add_widget(self._table)
+        layout.addWidget(table_panel, stretch=1)
         self.refresh()
 
     def set_areas(self, areas: list[BackupArea]) -> None:
@@ -175,7 +195,15 @@ class HistoryPage(QWidget):
             self._table.setItem(
                 row, 4, QTableWidgetItem(_duration_text(record.duration_seconds))
             )
-            self._table.setItem(row, 5, QTableWidgetItem(record.status.label_tr))
+            self._table.setCellWidget(
+                row,
+                5,
+                status_badge_widget(
+                    record.status.label_tr,
+                    backup_status_kind(record.status),
+                ),
+            )
+            self._table.setRowHeight(row, 40)
         self._lbl_total.setText(f"Toplam: {len(rows)}")
         self._lbl_success.setText(f"Başarılı: {success}")
         self._lbl_failed.setText(f"Başarısız: {failed}")

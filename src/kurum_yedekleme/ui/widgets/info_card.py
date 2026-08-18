@@ -12,6 +12,7 @@ class InfoCard(QFrame):
     def __init__(self, title: str, value: str = "—", parent: QWidget | None = None) -> None:
         super().__init__(parent)
         self.setObjectName("Card")
+        self.setProperty("accent", True)
         self.setMinimumHeight(96)
         layout = QVBoxLayout(self)
         layout.setContentsMargins(14, 12, 14, 12)

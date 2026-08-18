@@ -28,6 +28,9 @@ from PySide6.QtWidgets import (
 
 from kurum_yedekleme.db.models import BackupArea, BackupHistoryRecord
 from kurum_yedekleme.services.area_service import AreaError, AreaService, ScannedFolder
+from kurum_yedekleme.ui.widgets.page_header import PageHeader
+from kurum_yedekleme.ui.widgets.section_panel import SectionPanel
+from kurum_yedekleme.ui.widgets.status_badge import status_badge_widget
 
 
 class AreaEditDialog(QDialog):
@@ -125,13 +128,17 @@ class AreasPage(QWidget):
         self._last_by_id: dict[int, BackupHistoryRecord] = {}
 
         layout = QVBoxLayout(self)
-        layout.setContentsMargins(20, 16, 20, 16)
-        title = QLabel("Yedekleme Alanları")
-        title.setObjectName("PageTitle")
-        layout.addWidget(title)
+        layout.setContentsMargins(24, 20, 24, 20)
+        layout.setSpacing(16)
+
+        header = PageHeader(
+            "Yedekleme Alanları",
+            "Birim klasörlerini tanımlayın, düzenleyin veya ortak alandan toplu ekleyin.",
+        )
+        layout.addWidget(header)
 
         btns = QHBoxLayout()
-        add_btn = QPushButton("+ Yeni Alan Ekle")
+        add_btn = QPushButton("Yeni Alan Ekle")
         add_btn.setObjectName("PrimaryButton")
         add_btn.clicked.connect(self._add)
         scan_btn = QPushButton("Ortak Alanı Tara")
@@ -142,6 +149,7 @@ class AreasPage(QWidget):
         btns.addStretch(1)
         layout.addLayout(btns)
 
+        table_panel = SectionPanel("Tanımlı Alanlar")
         self._table = QTableWidget(0, 6)
         self._table.setHorizontalHeaderLabels(
             ["Alan adı", "Kaynak klasör", "Durum", "Son yedekleme", "Tür", "İşlem"]
@@ -149,11 +157,13 @@ class AreasPage(QWidget):
         self._table.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
         self._table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
         self._table.verticalHeader().setVisible(False)
+        self._table.setShowGrid(False)
         header = self._table.horizontalHeader()
         header.setSectionResizeMode(0, QHeaderView.ResizeMode.ResizeToContents)
         header.setSectionResizeMode(1, QHeaderView.ResizeMode.Stretch)
         header.setSectionResizeMode(5, QHeaderView.ResizeMode.ResizeToContents)
-        layout.addWidget(self._table)
+        table_panel.add_widget(self._table)
+        layout.addWidget(table_panel, stretch=1)
         self.refresh()
 
     def set_last_backups(self, mapping: dict[int, BackupHistoryRecord]) -> None:
@@ -167,7 +177,6 @@ class AreasPage(QWidget):
             row = self._table.rowCount()
             self._table.insertRow(row)
             last = self._last_by_id.get(area.id or -1)
-            status = "Aktif" if area.enabled else "Pasif"
             last_text = "—"
             type_text = "—"
             if last is not None:
@@ -176,7 +185,14 @@ class AreasPage(QWidget):
                 type_text = last.backup_type.label_tr
             self._table.setItem(row, 0, QTableWidgetItem(area.name))
             self._table.setItem(row, 1, QTableWidgetItem(area.source_path))
-            self._table.setItem(row, 2, QTableWidgetItem(status))
+            self._table.setCellWidget(
+                row,
+                2,
+                status_badge_widget(
+                    "Aktif" if area.enabled else "Pasif",
+                    "success" if area.enabled else "neutral",
+                ),
+            )
             self._table.setItem(row, 3, QTableWidgetItem(last_text))
             self._table.setItem(row, 4, QTableWidgetItem(type_text))
 
