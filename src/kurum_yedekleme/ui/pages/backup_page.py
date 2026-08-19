@@ -39,6 +39,8 @@ class BackupPage(QWidget):
 
         areas_panel = SectionPanel("Yedeklenecek Alanlar")
         self._checks: list[QCheckBox] = []
+        self._areas_snapshot: tuple | None = None
+        self._busy = False
         self._box = QVBoxLayout()
         self._box.setSpacing(8)
         areas_panel.add_layout(self._box)
@@ -67,22 +69,42 @@ class BackupPage(QWidget):
         layout.addStretch(1)
 
     def set_areas(self, areas: list[BackupArea]) -> None:
+        snapshot = tuple(
+            (area.id, area.name, area.source_path, area.enabled, area.deleted)
+            for area in areas
+        )
+        if snapshot == self._areas_snapshot:
+            return
+
+        selected_ids: set[int] | None = None
+        if self._checks:
+            selected_ids = {
+                int(box.property("area_id"))
+                for box in self._checks
+                if box.isChecked() and box.property("area_id") is not None
+            }
+
         while self._box.count():
             item = self._box.takeAt(0)
             widget = item.widget()
             if widget is not None:
                 widget.deleteLater()
         self._checks.clear()
+        self._areas_snapshot = snapshot
         if not areas:
             empty = QLabel("Henüz tanımlı yedekleme alanı yok.")
             empty.setObjectName("Muted")
             self._box.addWidget(empty)
+            self._sync_select_all_label()
             return
         for area in areas:
             box = QCheckBox(f"{area.name}  —  {area.source_path}")
             box.setProperty("area_id", area.id)
-            box.setEnabled(area.enabled)
-            box.setChecked(area.enabled)
+            box.setEnabled(bool(area.enabled) and not self._busy)
+            if selected_ids is None:
+                box.setChecked(bool(area.enabled))
+            else:
+                box.setChecked(bool(area.enabled and area.id in selected_ids))
             if not area.enabled:
                 box.setText(box.text() + "  [pasif]")
             self._box.addWidget(box)
@@ -122,6 +144,7 @@ class BackupPage(QWidget):
         self.backup_requested.emit(ids)
 
     def set_busy(self, busy: bool) -> None:
+        self._busy = busy
         self.backup_btn.setEnabled(not busy)
         self.select_all_btn.setEnabled(not busy)
         self.cancel_btn.setEnabled(busy)
