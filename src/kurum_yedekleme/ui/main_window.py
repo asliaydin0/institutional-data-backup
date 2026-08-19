@@ -299,6 +299,7 @@ class MainWindow(QMainWindow):
         )
         self._settings_page.refresh_service_status(service)
         self._history_page.refresh()
+        self._history_page.set_retention_run(self._runtime.retention.last_run())
         self._sync_tray_status()
         busy = " | YEDEKLEME ÇALIŞIYOR" if self._runtime.backups.is_busy else ""
         auto_label = "Otomatik (oturum)" if self._test_mode else "Otomatik"

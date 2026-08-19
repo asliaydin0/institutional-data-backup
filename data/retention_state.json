@@ -1,0 +1,12 @@
+{
+  "period_key": "2026-08-19",
+  "ran_at": "2026-08-19T16:11:58.880059+03:00",
+  "status": "SUCCESS",
+  "deleted_files": 0,
+  "deleted_bytes": 0,
+  "removed_dirs": 0,
+  "deleted_paths": [],
+  "errors": [],
+  "keep_days": 1,
+  "backup_root": "C:\\projeler\\test"
+}

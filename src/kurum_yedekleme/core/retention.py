@@ -18,10 +18,19 @@ class RetentionResult:
     deleted_bytes: int = 0
     removed_dirs: int = 0
     errors: list[str] = field(default_factory=list)
+    deleted_paths: list[str] = field(default_factory=list)
 
     @property
     def ok(self) -> bool:
         return not self.errors
+
+    @property
+    def status_label_tr(self) -> str:
+        if self.errors and self.deleted_files:
+            return "Kısmi"
+        if self.errors:
+            return "Başarısız"
+        return "Başarılı"
 
 
 def _parse_date_folder(name: str) -> date | None:
@@ -84,6 +93,8 @@ def purge_old_backups(
                     zip_path.unlink()
                     result.deleted_files += 1
                     result.deleted_bytes += size
+                    if len(result.deleted_paths) < 50:
+                        result.deleted_paths.append(str(zip_path))
                     logger.info(
                         "Eski yedek silindi: %s (%s bayt)",
                         zip_path,

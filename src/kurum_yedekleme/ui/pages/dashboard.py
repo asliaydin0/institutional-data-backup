@@ -9,7 +9,6 @@ from PySide6.QtCore import Signal
 from PySide6.QtWidgets import (
     QAbstractItemView,
     QGridLayout,
-    QHBoxLayout,
     QHeaderView,
     QLabel,
     QPushButton,

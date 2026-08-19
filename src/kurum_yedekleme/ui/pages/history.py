@@ -22,6 +22,7 @@ from PySide6.QtWidgets import (
 
 from kurum_yedekleme.db.models import BackupArea, BackupStatus, BackupType
 from kurum_yedekleme.services.history_service import HistoryService
+from kurum_yedekleme.services.retention_service import RetentionRunRecord
 from kurum_yedekleme.ui.widgets.page_header import PageHeader
 from kurum_yedekleme.ui.widgets.section_panel import SectionPanel
 from kurum_yedekleme.ui.theme import style_date_edit
@@ -61,7 +62,8 @@ class HistoryPage(QWidget):
             PageHeader(
                 "Geçmiş",
                 "Yedekleme kayıtlarını filtreleyin. "
-                "Yedek dosyasının klasörünü açmak için satıra çift tıklayın.",
+                "Satıra çift tıklayınca yedek klasörü açılır. "
+                "Eski ZIP temizliği bu sayfanın altındadır.",
             )
         )
 
@@ -73,9 +75,12 @@ class HistoryPage(QWidget):
         self._lbl_success.setObjectName("StatChipSuccess")
         self._lbl_failed = QLabel("Başarısız: —")
         self._lbl_failed.setObjectName("StatChipFailed")
+        self._lbl_cleanup = QLabel("Temizlik: —")
+        self._lbl_cleanup.setObjectName("StatChip")
         summary.addWidget(self._lbl_total)
         summary.addWidget(self._lbl_success)
         summary.addWidget(self._lbl_failed)
+        summary.addWidget(self._lbl_cleanup)
         summary.addStretch(1)
         layout.addLayout(summary)
 
@@ -129,6 +134,28 @@ class HistoryPage(QWidget):
         header.setSectionResizeMode(1, QHeaderView.ResizeMode.Stretch)
         table_panel.add_widget(self._table)
         layout.addWidget(table_panel, stretch=1)
+
+        cleanup_panel = SectionPanel("Son Otomatik Temizlik")
+        self._cleanup_summary = QLabel("Henüz temizlik çalışmadı.")
+        self._cleanup_summary.setObjectName("Muted")
+        self._cleanup_summary.setWordWrap(True)
+        cleanup_panel.add_widget(self._cleanup_summary)
+        self._cleanup_table = QTableWidget(0, 1)
+        self._cleanup_table.setHorizontalHeaderLabels(["Silinen ZIP"])
+        self._cleanup_table.setAlternatingRowColors(True)
+        self._cleanup_table.setEditTriggers(
+            QAbstractItemView.EditTrigger.NoEditTriggers
+        )
+        self._cleanup_table.verticalHeader().setVisible(False)
+        self._cleanup_table.setShowGrid(False)
+        self._cleanup_table.horizontalHeader().setSectionResizeMode(
+            0, QHeaderView.ResizeMode.Stretch
+        )
+        self._cleanup_table.setMinimumHeight(0)
+        self._cleanup_table.setMaximumHeight(160)
+        self._cleanup_table.setVisible(False)
+        cleanup_panel.add_widget(self._cleanup_table)
+        layout.addWidget(cleanup_panel)
         self.refresh()
 
     def set_areas(self, areas: list[BackupArea]) -> None:
@@ -143,6 +170,57 @@ class HistoryPage(QWidget):
         if idx >= 0:
             self._area_combo.setCurrentIndex(idx)
         self._area_combo.blockSignals(False)
+
+    def set_retention_run(self, record: RetentionRunRecord | None) -> None:
+        self._cleanup_table.setRowCount(0)
+        if record is None:
+            self._set_cleanup_chip("Temizlik: —", "StatChip")
+            self._cleanup_summary.setText(
+                "Henüz otomatik temizlik çalışmadı. "
+                "Ayarlar’da «Eski yedekleri otomatik sil» açık olmalı."
+            )
+            self._cleanup_table.setVisible(False)
+            return
+        local = record.ran_at.astimezone()
+        chip_style = (
+            "StatChipFailed"
+            if record.status in {"FAILED", "PARTIAL"}
+            else "StatChipSuccess"
+        )
+        self._set_cleanup_chip(f"Temizlik: {record.status_label_tr}", chip_style)
+        if record.deleted_files == 0 and not record.errors:
+            self._cleanup_summary.setText(
+                f"{local.strftime('%d.%m.%Y %H:%M')} — silinecek eski ZIP yoktu "
+                f"(saklama {record.keep_days} gün)."
+            )
+        elif record.errors:
+            self._cleanup_summary.setText(
+                f"{local.strftime('%d.%m.%Y %H:%M')} — {record.status_label_tr}: "
+                f"{record.deleted_files} ZIP silindi. "
+                + (record.errors[0] if record.errors else "")
+            )
+        else:
+            self._cleanup_summary.setText(
+                f"{local.strftime('%d.%m.%Y %H:%M')} — {record.deleted_files} ZIP silindi "
+                f"({format_bytes(record.deleted_bytes)})."
+            )
+        rows = list(record.deleted_paths)
+        if not rows and record.errors:
+            rows = record.errors[:10]
+        for path in rows:
+            row = self._cleanup_table.rowCount()
+            self._cleanup_table.insertRow(row)
+            item = QTableWidgetItem(path)
+            item.setToolTip(path)
+            self._cleanup_table.setItem(row, 0, item)
+            self._cleanup_table.setRowHeight(row, 28)
+        self._cleanup_table.setVisible(bool(rows))
+
+    def _set_cleanup_chip(self, text: str, object_name: str) -> None:
+        self._lbl_cleanup.setText(text)
+        self._lbl_cleanup.setObjectName(object_name)
+        self._lbl_cleanup.style().unpolish(self._lbl_cleanup)
+        self._lbl_cleanup.style().polish(self._lbl_cleanup)
 
     def refresh(self) -> None:
         if self._history is None:

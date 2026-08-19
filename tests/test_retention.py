@@ -26,6 +26,33 @@ def test_purge_deletes_old_zip_only(tmp_path: Path):
     assert old_dir.exists()
 
 
+def test_retention_run_records_last_run(runtime, tmp_path):
+    from dataclasses import replace
+
+    root = Path(runtime.settings.backup_root)
+    old_dir = root / "Personel" / "2020-01-01"
+    old_dir.mkdir(parents=True)
+    zip_path = old_dir / "Personel.zip"
+    zip_path.write_bytes(b"old")
+    runtime.retention.update_settings(
+        replace(runtime.settings, retention=replace(runtime.settings.retention, enabled=True, keep_days=1))
+    )
+    result = runtime.retention.run_now(period_key="2026-08-19")
+    assert result.deleted_files == 1
+    record = runtime.retention.last_run()
+    assert record is not None
+    assert record.status == "SUCCESS"
+    assert record.deleted_files == 1
+    assert any("Personel.zip" in p for p in record.deleted_paths)
+
+
+def test_retention_logger_accepts_operation(runtime):
+    runtime.retention.run_now()
+    record = runtime.retention.last_run()
+    assert record is not None
+    assert record.status in {"SUCCESS", "FAILED", "PARTIAL"}
+
+
 def test_retention_scheduler_weekly_tick(runtime, tmp_path):
     from dataclasses import replace
 
