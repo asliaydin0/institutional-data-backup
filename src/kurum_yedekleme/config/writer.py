@@ -150,9 +150,15 @@ def save_runtime_settings(
     path = ensure_config_file(config_path or default_config_path())
     raw = _load_raw(path)
 
-    root = str(backup_root).strip()
-    if not root:
-        raise ConfigError("Yedek kök klasörü boş olamaz.")
+    from kurum_yedekleme.services.disk_space import (
+        BackupRootError,
+        validate_production_backup_root,
+    )
+
+    try:
+        root = str(validate_production_backup_root(backup_root))
+    except BackupRootError as exc:
+        raise ConfigError(str(exc)) from exc
 
     schedule_cfg = validate_schedule_settings(
         ScheduleConfig(

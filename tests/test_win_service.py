@@ -7,6 +7,23 @@ import sys
 import pytest
 
 from kurum_yedekleme import win_service
+from kurum_yedekleme.services.windows_service import stop_service
+
+
+def test_stop_service_requires_admin(monkeypatch: pytest.MonkeyPatch) -> None:
+    class _Running:
+        state = "running"
+
+    monkeypatch.setattr(
+        "kurum_yedekleme.services.windows_service.query_service",
+        lambda: _Running(),
+    )
+    monkeypatch.setattr(
+        "kurum_yedekleme.services.windows_service.is_user_admin",
+        lambda: False,
+    )
+    with pytest.raises(RuntimeError, match="yönetici yetkisi"):
+        stop_service()
 
 
 def test_install_requires_admin(monkeypatch: pytest.MonkeyPatch) -> None:

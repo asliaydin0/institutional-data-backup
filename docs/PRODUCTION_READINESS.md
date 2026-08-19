@@ -8,7 +8,7 @@
 
 GUI ve Windows Service aynı `BackupManager` kodunu kullanır. Otomatik zamanlama yalnızca serviste çalışır.
 
-Yedek kökü production’da `E:\Yedekler`. TEST MODE `tests/test_data/yedekler` kullanır.
+Yedek kökü Ayarlar’daki `backup_root` değeridir. TEST MODE `tests/test_data/yedekler` kullanır.
 
 ## Kaldırılan özellikler
 

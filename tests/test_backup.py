@@ -46,11 +46,15 @@ def test_next_zip_path(tmp_path: Path):
     assert second.name == "Personel_2.zip"
 
 
-def test_e_drive_validation():
+def test_backup_root_must_be_absolute():
     assert is_e_drive(r"E:\Yedekler") is True
     assert is_e_drive(r"C:\Yedekler") is False
+    assert validate_production_backup_root(r"C:\Yedekler") == Path(r"C:\Yedekler")
+    assert validate_production_backup_root(r"E:\Yedekler") == Path(r"E:\Yedekler")
     with pytest.raises(BackupRootError):
-        validate_production_backup_root(r"C:\Yedekler")
+        validate_production_backup_root("Yedekler")
+    with pytest.raises(BackupRootError):
+        validate_production_backup_root("   ")
 
 
 def test_disk_space_insufficient(tmp_path: Path):

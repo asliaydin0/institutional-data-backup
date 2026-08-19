@@ -17,7 +17,8 @@ from kurum_yedekleme.services.disk_space import (
     can_read_directory,
     disk_usage_for,
     estimate_source_bytes,
-    is_e_drive,
+    validate_production_backup_root,
+    BackupRootError,
 )
 from kurum_yedekleme.utils.formatting import format_bytes
 from kurum_yedekleme.utils.paths import resolve_under_root
@@ -88,17 +89,22 @@ def run_preflight(
 
     root = Path(settings.backup_root)
     if test_mode:
-        drive_ok = True
-        drive_detail = f"TEST MODE kök: {root}"
+        root_ok = True
+        root_detail = f"TEST MODE kök: {root}"
     else:
-        drive_ok = is_e_drive(root)
-        drive_detail = str(root)
+        try:
+            validate_production_backup_root(root)
+            root_ok = True
+            root_detail = str(root)
+        except BackupRootError as exc:
+            root_ok = False
+            root_detail = str(exc)
     report.checks.append(
         CheckItem(
-            key="e_drive",
-            label="E: yedek kökü",
-            ok=drive_ok,
-            detail=drive_detail,
+            key="backup_root",
+            label="Yedek kökü",
+            ok=root_ok,
+            detail=root_detail,
         )
     )
 
@@ -141,7 +147,7 @@ def run_preflight(
     report.checks.append(
         CheckItem(
             key="dest_write",
-            label="E:\\Yedekler yazılabilir",
+            label="Yedek kökü yazılabilir",
             ok=write_ok,
             detail=write_detail,
         )

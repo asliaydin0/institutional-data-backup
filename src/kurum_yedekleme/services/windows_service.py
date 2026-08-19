@@ -49,11 +49,57 @@ def is_user_admin() -> bool:
         return False
 
 
+ADMIN_REQUIRED = (
+    "Servis kurmak, başlatmak, durdurmak veya kaldırmak "
+    "yönetici yetkisi gerektirir.\n\n"
+    "Cursor terminali yönetici değildir. UAC penceresinde Evet deyin "
+    "veya uygulamayı «Yönetici olarak çalıştır» ile açın."
+)
+
+
+def require_admin() -> None:
+    if not is_user_admin():
+        raise RuntimeError(ADMIN_REQUIRED)
+
+
+def relaunch_as_admin() -> bool:
+    """UAC ile aynı uygulamayı yönetici olarak açar. Başarılıysa True."""
+    if os.name != "nt":
+        return False
+    try:
+        import ctypes
+    except ImportError:
+        return False
+    cwd = str(get_project_root())
+    if is_frozen():
+        exe = str(Path(sys.executable).resolve())
+        extra = sys.argv[1:]
+        params = " ".join(f'"{a}"' if " " in str(a) else str(a) for a in extra)
+    else:
+        exe = str(service_executable())
+        params = "-m kurum_yedekleme"
+    result = ctypes.windll.shell32.ShellExecuteW(
+        None, "runas", exe, params, cwd, 1
+    )
+    return int(result) > 32
+
+
+def _sc_encoding() -> str:
+    if os.name != "nt":
+        return "utf-8"
+    try:
+        import locale
+
+        return locale.getpreferredencoding(False) or "utf-8"
+    except (OSError, ValueError):
+        return "utf-8"
+
+
 def _run_sc(args: list[str]) -> subprocess.CompletedProcess[str]:
     kwargs = {
         "capture_output": True,
         "text": True,
-        "encoding": "utf-8",
+        "encoding": _sc_encoding(),
         "errors": "replace",
         "check": False,
     }
@@ -92,11 +138,7 @@ def start_service() -> None:
         raise RuntimeError(
             "Servis kurulu değil. Önce «Servisi Kur» ile yükleyin."
         )
-    if not is_user_admin():
-        raise RuntimeError(
-            "Servis başlatmak yönetici yetkisi gerektirir.\n\n"
-            "Uygulamayı «Yönetici olarak çalıştır» ile açın."
-        )
+    require_admin()
     result = _run_sc(["start", SERVICE_NAME])
     if result.returncode != 0:
         detail = (result.stderr or result.stdout or "").strip()
@@ -107,6 +149,7 @@ def stop_service() -> None:
     status = query_service()
     if status.state != "running":
         return
+    require_admin()
     result = _run_sc(["stop", SERVICE_NAME])
     if result.returncode != 0:
         detail = (result.stderr or result.stdout or "").strip()

@@ -1,4 +1,4 @@
-"""Ayarlar — zamanlama, E:\\Yedekler, saklama, Windows Service."""
+"""Ayarlar — yedek kökü, zamanlama, saklama, Windows Service."""
 
 from __future__ import annotations
 
@@ -7,8 +7,10 @@ from dataclasses import replace
 from PySide6.QtCore import QTime, Signal
 from PySide6.QtWidgets import (
     QAbstractSpinBox,
+    QApplication,
     QCheckBox,
     QComboBox,
+    QFileDialog,
     QFormLayout,
     QHBoxLayout,
     QLabel,
@@ -29,6 +31,7 @@ from kurum_yedekleme.services.windows_service import (
     ServiceStatus,
     is_user_admin,
     query_service,
+    relaunch_as_admin,
     start_service,
     stop_service,
 )
@@ -59,10 +62,19 @@ class SettingsPage(QWidget):
 
         general_panel = SectionPanel("Genel")
         form = QFormLayout()
+        root_row = QHBoxLayout()
+        root_row.setSpacing(8)
         self._root = QLineEdit(settings.backup_root)
-        self._root.setReadOnly(True)
-        self._root.setToolTip("Production yedekleri yalnızca E:\\Yedekler altındadır.")
-        form.addRow("Yedek kökü:", self._root)
+        self._root.setToolTip(
+            "Yedek ZIP dosyalarının yazılacağı klasör. "
+            "Tam yol girin veya Gözat ile seçin."
+        )
+        self._browse_root = QPushButton("Gözat…")
+        self._browse_root.setObjectName("SecondaryButton")
+        self._browse_root.clicked.connect(self._browse_backup_root)
+        root_row.addWidget(self._root, stretch=1)
+        root_row.addWidget(self._browse_root)
+        form.addRow("Yedek kökü:", root_row)
 
         self._enabled = QCheckBox("Otomatik yedeklemeyi etkinleştir")
         self._enabled.setChecked(settings.schedule.enabled)
@@ -157,13 +169,20 @@ class SettingsPage(QWidget):
         self._svc_label = QLabel("Servis: —")
         svc_layout.addWidget(self._svc_label)
         self._svc_admin_hint = QLabel(
-            "Servis kurulumu için uygulamayı yönetici olarak çalıştırın "
-            "veya scripts\\install_service.ps1 kullanın."
+            "Bu pencere yönetici değil. Servis düğmeleri UAC ile "
+            "uygulamayı yönetici olarak yeniden açar. "
+            "Otomatik yedekleme için GUI'nin yönetici olması gerekmez; "
+            "servis zaten arka planda çalışıyorsa yeterlidir."
         )
         self._svc_admin_hint.setObjectName("Muted")
         self._svc_admin_hint.setWordWrap(True)
         self._svc_admin_hint.setVisible(not is_user_admin())
         svc_layout.addWidget(self._svc_admin_hint)
+        self._svc_elevate = QPushButton("Yönetici olarak yeniden başlat")
+        self._svc_elevate.setObjectName("SecondaryButton")
+        self._svc_elevate.setVisible(not is_user_admin())
+        self._svc_elevate.clicked.connect(self._relaunch_elevated)
+        svc_layout.addWidget(self._svc_elevate)
         svc_row = QHBoxLayout()
         svc_row.setSpacing(8)
         self._svc_install = QPushButton("Servisi Kur")
@@ -206,6 +225,9 @@ class SettingsPage(QWidget):
             self._svc_remove,
         ):
             btn.setEnabled(not self._test_mode)
+        self._svc_elevate.setEnabled(not self._test_mode)
+        self._svc_elevate.setVisible(not self._test_mode and not is_user_admin())
+        self._svc_admin_hint.setVisible(not self._test_mode and not is_user_admin())
         if self._test_mode:
             self._root.setReadOnly(False)
             self._hint.setText(
@@ -216,7 +238,6 @@ class SettingsPage(QWidget):
             )
             self._save_btn.setText("Oturuma Uygula")
         else:
-            self._root.setReadOnly(True)
             self._save_btn.setText("Ayarları Kaydet")
 
     def apply_settings(self, settings: AppSettings) -> None:
@@ -245,6 +266,16 @@ class SettingsPage(QWidget):
             self._retention_weekday.setCurrentIndex(widx)
         self._retention_dom.setValue(settings.retention.day_of_month)
         self._sync_retention_fields()
+
+    def _browse_backup_root(self) -> None:
+        current = self._root.text().strip() or self._settings.backup_root
+        chosen = QFileDialog.getExistingDirectory(
+            self,
+            "Yedek kök klasörünü seçin",
+            current,
+        )
+        if chosen:
+            self._root.setText(chosen)
 
     def _sync_schedule_fields(self) -> None:
         enabled = self._enabled.isChecked()
@@ -368,7 +399,7 @@ class SettingsPage(QWidget):
                 )
             else:
                 updated = save_runtime_settings(
-                    backup_root=self._settings.backup_root,
+                    backup_root=self._root.text().strip() or self._settings.backup_root,
                     schedule_enabled=sched_enabled,
                     schedule_frequency=sched_freq,
                     schedule_time=sched_time,
@@ -386,10 +417,16 @@ class SettingsPage(QWidget):
             return
         self.apply_settings(updated)
         self.settings_saved.emit(updated)
+        saved_msg = "Ayarlar kaydedildi."
+        if not self._test_mode:
+            saved_msg += (
+                "\n\nOtomatik yedekleme Windows Service tarafından yürütülür; "
+                "çalışan servis kaydı birkaç saniye içinde okur."
+            )
         QMessageBox.information(
             self,
             "Ayarlar",
-            "Ayarlar kaydedildi."
+            saved_msg
             if not self._test_mode
             else (
                 "Ayarlar bu TEST MODE oturumuna uygulandı.\n\n"
@@ -398,7 +435,37 @@ class SettingsPage(QWidget):
             ),
         )
 
+    def _relaunch_elevated(self) -> bool:
+        if is_user_admin():
+            return True
+        answer = QMessageBox.question(
+            self,
+            "Yönetici yetkisi",
+            "Servis kur / başlat / durdur / kaldır için yönetici gerekir.\n\n"
+            "Uygulama UAC ile yönetici olarak yeniden açılsın mı?\n"
+            "(Cursor içinden açılan pencere yönetici değildir.)",
+        )
+        if answer != QMessageBox.StandardButton.Yes:
+            return False
+        if not relaunch_as_admin():
+            QMessageBox.warning(
+                self,
+                "Servis",
+                "Yönetici onayı verilmedi veya yeniden başlatılamadı.",
+            )
+            return False
+        window = self.window()
+        if hasattr(window, "request_quit"):
+            window.request_quit()
+        else:
+            app = QApplication.instance()
+            if app is not None:
+                app.quit()
+        return False
+
     def _install_service(self) -> None:
+        if not self._relaunch_elevated():
+            return
         try:
             from kurum_yedekleme.win_service import install_win32_service
 
@@ -419,6 +486,8 @@ class SettingsPage(QWidget):
         self.refresh_service_status()
 
     def _remove_service(self) -> None:
+        if not self._relaunch_elevated():
+            return
         try:
             from kurum_yedekleme.win_service import remove_win32_service
 
@@ -429,6 +498,8 @@ class SettingsPage(QWidget):
         self.refresh_service_status()
 
     def _start_service(self) -> None:
+        if not self._relaunch_elevated():
+            return
         try:
             start_service()
         except Exception as exc:  # noqa: BLE001
@@ -436,6 +507,8 @@ class SettingsPage(QWidget):
         self.refresh_service_status()
 
     def _stop_service(self) -> None:
+        if not self._relaunch_elevated():
+            return
         try:
             stop_service()
         except Exception as exc:  # noqa: BLE001

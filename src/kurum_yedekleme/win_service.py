@@ -1,4 +1,9 @@
-"""pywin32 Windows Service sarmalayıcısı."""
+"""pywin32 Windows Service sarmalayıcısı.
+
+Host olarak venv python.exe kullanılır (pythonservice.exe değil).
+SCM, ImagePath'teki python.exe ile bu dosyayı çalıştırır; paket
+venv site-packages / .pth üzerinden bulunur.
+"""
 
 from __future__ import annotations
 
@@ -7,9 +12,8 @@ import os
 import sys
 import threading
 from pathlib import Path
-from typing import TYPE_CHECKING, Any
 
-# pythonservice.exe PYTHONPATH olmadan çalışır; geliştirme ortamında src'yi ekle.
+# pythonservice / LocalSystem PYTHONPATH olmadan da src'yi görsün.
 _PROJECT_ROOT = Path(__file__).resolve().parents[2]
 _SRC_ROOT = _PROJECT_ROOT / "src"
 if _SRC_ROOT.is_dir():
@@ -24,10 +28,8 @@ logger = logging.getLogger(__name__)
 
 _SERVICE_SCRIPT = Path(__file__).resolve()
 
-if TYPE_CHECKING:
-    KurumYedeklemeWinService: Any
-else:
-    KurumYedeklemeWinService = None
+KurumYedeklemeWinService = None
+_win32serviceutil = None
 
 
 def _require_pywin32():
@@ -44,17 +46,25 @@ def _require_pywin32():
     return servicemanager, win32event, win32service, win32serviceutil
 
 
+def _host_python() -> str:
+    """venv python.exe — pythonservice.exe venv site-packages yüklemez."""
+    venv_python = _PROJECT_ROOT / ".venv" / "Scripts" / "python.exe"
+    if venv_python.is_file():
+        return str(venv_python)
+    return sys.executable
+
+
 def _build_service_class():
     servicemanager, win32event, win32service, win32serviceutil = _require_pywin32()
 
     class KurumYedeklemeWinService(win32serviceutil.ServiceFramework):
-        """SCM tarafından import edilebilir olmalı — isim değiştirilmemeli."""
-
         _svc_name_ = SERVICE_NAME
         _svc_display_name_ = SERVICE_DISPLAY
         _svc_description_ = (
-            "Kurum klasörlerini E:\\Yedekler altına günlük ZIP olarak yedekler."
+            "Kurum klasörlerini seçilen yedek kökü altına ZIP olarak yedekler."
         )
+        _exe_name_ = _host_python()
+        _exe_args_ = f'"{_SERVICE_SCRIPT}"'
 
         def __init__(self, args):
             win32serviceutil.ServiceFramework.__init__(self, args)
@@ -67,7 +77,7 @@ def _build_service_class():
             win32event.SetEvent(self.hWaitStop)
 
         def SvcDoRun(self):
-            os.chdir(get_project_root())
+            os.chdir(str(get_project_root()))
             servicemanager.LogInfoMsg(f"{SERVICE_NAME} başladı")
             try:
                 from kurum_yedekleme.service_host import run_service_loop
@@ -107,10 +117,33 @@ def _configure_installed_service() -> None:
     root = str(get_project_root())
     win32serviceutil.SetServiceCustomOption(SERVICE_NAME, "AppDirectory", root)
     _set_service_pythonpath(src_root())
+    _set_pythonclass_file_path()
+
+
+def _set_pythonclass_file_path() -> None:
+    """SCM'nin paketi değil, bu .py dosyasını yüklemesini sağlar."""
+    try:
+        import win32api
+        import win32con
+        import win32serviceutil
+    except ImportError:
+        return
+    class_str = os.path.splitext(str(_SERVICE_SCRIPT))[0] + ".KurumYedeklemeWinService"
+    win32serviceutil.InstallPythonClassString(class_str, SERVICE_NAME)
+    # python.exe host: çalışma dizini proje kökü olsun
+    key = win32api.RegCreateKey(
+        win32con.HKEY_LOCAL_MACHINE,
+        rf"SYSTEM\CurrentControlSet\Services\{SERVICE_NAME}\Parameters",
+    )
+    try:
+        win32api.RegSetValueEx(
+            key, "AppDirectory", 0, win32con.REG_SZ, str(get_project_root())
+        )
+    finally:
+        win32api.RegCloseKey(key)
 
 
 def _set_service_pythonpath(src: Path) -> None:
-    """LocalSystem sürecine PYTHONPATH ver (SCM Environment)."""
     try:
         import win32api
         import win32con
@@ -199,5 +232,18 @@ def HandleCommandLine() -> None:
     util.HandleCommandLine(cls)
 
 
+def _run_from_scm() -> None:
+    """SCM python.exe ile bu dosyayı başlattığında denetleyiciye bağlan."""
+    servicemanager, _, _, _ = _require_pywin32()
+    cls, _util = _service_util()
+    servicemanager.Initialize(SERVICE_NAME, None)
+    servicemanager.PrepareToHostSingle(cls)
+    servicemanager.StartServiceCtrlDispatcher()
+
+
 if __name__ == "__main__":
-    HandleCommandLine()
+    # SCM: argv yalnızca bu script. Kurulum: install / remove / update.
+    if len(sys.argv) == 1:
+        _run_from_scm()
+    else:
+        HandleCommandLine()

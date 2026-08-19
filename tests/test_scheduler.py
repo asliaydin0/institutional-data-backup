@@ -88,6 +88,25 @@ def test_service_loop_does_not_need_gui(runtime):
     assert runtime.schedule.is_running is False
 
 
+def test_apply_settings_to_runtime_updates_schedule(runtime):
+    from kurum_yedekleme.config.schema import AppSettings, ScheduleConfig
+    from kurum_yedekleme.service_host import apply_settings_to_runtime
+
+    updated = AppSettings(
+        app=runtime.settings.app,
+        backup_root=runtime.settings.backup_root,
+        schedule=ScheduleConfig(enabled=True, time="11:20"),
+        retention=runtime.settings.retention,
+        retry=runtime.settings.retry,
+        logging=runtime.settings.logging,
+        zip=runtime.settings.zip,
+    )
+    apply_settings_to_runtime(runtime, updated)
+    assert runtime.schedule.schedule.enabled is True
+    assert runtime.schedule.schedule.time == "11:20"
+    assert runtime.settings.schedule.time == "11:20"
+
+
 def test_update_schedule_runs_missed_while_running(runtime, area_source):
     runtime.areas.add_area(name="Personel", source_path=str(area_source))
     runtime.schedule.start()

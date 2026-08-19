@@ -86,10 +86,11 @@ def test_migrates_old_history(tmp_path: Path):
     db.close()
 
 
-def test_production_config_requires_e_drive():
-    settings = AppSettings(backup_root=r"C:\Yedekler")
-    result = validate_production_settings(settings)
-    assert result.ok is False
-    settings_ok = AppSettings(backup_root=DEFAULT_BACKUP_ROOT)
-    assert is_e_drive(settings_ok.backup_root)
-    assert validate_production_settings(settings_ok).ok is True
+def test_production_config_accepts_any_absolute_root():
+    relative = AppSettings(backup_root="Yedekler")
+    assert validate_production_settings(relative).ok is False
+    settings_c = AppSettings(backup_root=r"C:\Yedekler")
+    assert validate_production_settings(settings_c).ok is True
+    settings_e = AppSettings(backup_root=DEFAULT_BACKUP_ROOT)
+    assert is_e_drive(settings_e.backup_root)
+    assert validate_production_settings(settings_e).ok is True

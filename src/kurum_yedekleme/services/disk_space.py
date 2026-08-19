@@ -1,4 +1,4 @@
-"""Disk alanı ve E: yedek kökü kontrolleri."""
+"""Disk alanı ve yedek kökü kontrolleri."""
 
 from __future__ import annotations
 
@@ -79,12 +79,15 @@ def estimate_source_bytes(source_root: Path) -> int:
 
 
 def validate_production_backup_root(backup_root: Path | str) -> Path:
-    """Production: yedekler yalnızca E: üzerinde olabilir."""
-    root = Path(backup_root)
-    if not is_e_drive(root):
+    """Yedek kökü boş olamaz ve mutlak yol olmalıdır (herhangi bir sürücü / UNC)."""
+    text = str(backup_root).strip()
+    if not text:
+        raise BackupRootError("Yedek kök klasörü boş olamaz.")
+    root = Path(text)
+    if not root.is_absolute():
         raise BackupRootError(
-            "Yedekler yalnızca E: diskinde tutulabilir. "
-            f"Geçerli yol: {root} — beklenen: E:\\Yedekler"
+            "Yedek kökü tam yol olmalıdır (ör. D:\\Yedekler veya \\\\sunucu\\paylasim)."
+            f" Verilen: {text}"
         )
     return root
 

@@ -1,6 +1,6 @@
 # Kurum Yedekleme
 
-Kurum birimlerinin klasörlerini ZIP olarak **yalnızca `E:\Yedekler`** altına yedekleyen Windows masaüstü uygulaması (PySide6, Türkçe).
+Kurum birimlerinin klasörlerini ZIP olarak seçilen yedek kökü altına yedekleyen Windows masaüstü uygulaması (PySide6, Türkçe).
 
 Otomatik yedekleme **Windows Service** ile çalışır. GUI kapalı olsa ve kullanıcı oturum açmamış olsa bile servis yedek alabilir.
 
@@ -9,7 +9,7 @@ Otomatik yedekleme **Windows Service** ile çalışır. GUI kapalı olsa ve kull
 ## Ne yapar?
 
 - Birden fazla **yedekleme alanı** (birim/klasör): Helal Akreditasyon, Personel, Destek Hizmetleri, …
-- Her alan `E:\Yedekler\<Alan>\<YYYY-MM-DD_HH-MM-SS>\<Alan>.zip` yoluna yazılır
+- Her alan `<yedek_kökü>\<Alan>\<YYYY-MM-DD_HH-MM-SS>\<Alan>.zip` yoluna yazılır
 - Manuel seçimli yedek; günlük / haftalık / aylık otomatik yedek
 - İsteğe bağlı eski ZIP temizliği (saklama süresi)
 - SQLite geçmişi: alan, manuel/otomatik, durum, boyut, süre
@@ -40,9 +40,9 @@ cd C:\yol\KurumYedekleme\KurumYedekleme
 | Ortam | Ne için | Nasıl çalıştırılır |
 |-------|---------|-------------------|
 | **Kendi PC** (geliştirme) | Kod, arayüz, test | `python -m kurum_yedekleme --test-mode` — **E: gerekmez**, Windows Service **gerekmez** |
-| **Kurum PC** (üretim) | Gerçek yedek | `E:\Yedekler` olmalı; GUI + Windows Service **yönetici** olarak kurulur |
+| **Kurum PC** (üretim) | Gerçek yedek | Ayarlar’da yedek kökü (ör. `E:\Yedekler`); GUI + Windows Service **yönetici** olarak kurulur |
 
-Kendi PC’de servis kurmaya çalışmayın: yönetici isteseniz bile yedek kökü `E:\Yedekler` bu makinede yoksa üretim yedeği yazılmaz. Geliştirmeyi TEST MODE ile yapın.
+Kendi PC’de servis kurmaya çalışmayın. Geliştirmeyi TEST MODE ile yapın.
 
 Kurum PC’de ilk kurulum (Yönetici PowerShell):
 
@@ -59,7 +59,7 @@ Ardından GUI’yi **Yönetici olarak çalıştır** ile açın; Ayarlar’dan s
 
 1. `config/config.example.yaml` dosyasını inceleyin.
 2. İlk çalıştırmada `config/config.yaml` örnekten oluşur (git’e eklenmez).
-3. `backup_root` production’da `E:\Yedekler` olmalıdır.
+3. `backup_root` yedeklerin yazılacağı klasördür (Ayarlar’dan değiştirilir).
 4. Yedekleme **alanları YAML’da değil**, SQLite’dadır (`data/kurum_yedekleme.db`).
 5. Parola yazmayın.
 
@@ -100,7 +100,7 @@ Headless test yedeklemesi (GUI yok):
 python -m kurum_yedekleme --run-test-backup
 ```
 
-### Kurum PC — üretim GUI (`E:\Yedekler`, config.yaml)
+### Kurum PC — üretim GUI (yedek kökü, config.yaml)
 
 ```powershell
 python -m kurum_yedekleme
@@ -132,7 +132,7 @@ sc query KurumYedekleme
 
 veya `.\scripts\install_service.ps1`
 
-GUI → **Ayarlar** ekranından da servis kurulumu / başlatma / durdurma yapılabilir. Ayar kaydı sonrası servisi yeniden başlatın; çalışan servis `config.yaml` değişikliğini otomatik okumaz.
+GUI → **Ayarlar** ekranından da servis kurulumu / başlatma / durdurma yapılabilir. Ayar kaydı sonrası çalışan servis `config.yaml` değişikliğini birkaç saniye içinde okur; kaçırılmış otomatik yedek varsa hemen alır.
 
 ## GUI kullanımı
 
@@ -180,7 +180,7 @@ Planlanan saat geçmiş ve yedek alınmamışsa servis (veya TEST MODE’da aç�
 ## Yedek klasör yapısı
 
 ```
-E:\Yedekler\
+<yedek_kökü>\
 ├── Helal Akreditasyon\
 │   └── 2026-08-14_02-00-15\
 │       └── Helal Akreditasyon.zip
@@ -240,7 +240,7 @@ Temiz PC: `dist\KurumYedekleme\` klasörünün **tamamını** kopyalayın. Servi
 
 ## Production kontrol listesi
 
-1. [ ] `E:` diski var; `E:\Yedekler` yazılabilir
+1. [ ] Yedek kökü Ayarlar’da seçildi ve yazılabilir
 2. [ ] Alanlar GUI’den eklendi; kaynaklar okunabiliyor
 3. [ ] TEST MODE kapalı
 4. [ ] Windows Service kurulu ve **Çalışıyor** (`sc query KurumYedekleme`)
@@ -260,7 +260,7 @@ Windows
        → Zamanlayıcı + saklama temizliği
             → Backup Manager
                  → aktif alanlar
-                      → E:\Yedekler\<Alan>\<tarih_saat>\<Alan>.zip
+                      → <yedek_kökü>\<Alan>\<tarih_saat>\<Alan>.zip
   → GUI (isteğe bağlı)
        → alan yönetimi, manuel yedek, geçmiş, servis durumu
 ```

@@ -4,7 +4,7 @@ app:
   data_dir: "./data"
   log_dir: "./logs"
 
-# Tüm yedekler yalnızca E: diskinde tutulur
+# Yedeklerin yazılacağı klasör (Ayarlar ekranından değiştirilebilir)
 backup_root: "E:\\Yedekler"
 
 schedule:

@@ -3,11 +3,13 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from pathlib import Path
 
 from kurum_yedekleme.config.schema import AppSettings
 from kurum_yedekleme.config.writer import validate_schedule_time
-from kurum_yedekleme.services.disk_space import is_e_drive
+from kurum_yedekleme.services.disk_space import (
+    BackupRootError,
+    validate_production_backup_root,
+)
 
 
 class ProductionConfigError(ValueError):
@@ -37,13 +39,13 @@ class ValidationResult:
 
 def validate_production_settings(settings: AppSettings) -> ValidationResult:
     issues: list[str] = []
-    root = Path(settings.backup_root)
     if not str(settings.backup_root).strip():
         issues.append("backup_root — boş")
-    elif not is_e_drive(root):
-        issues.append(
-            f"backup_root — yalnızca E: diski kabul edilir: {settings.backup_root!r}"
-        )
+    else:
+        try:
+            validate_production_backup_root(settings.backup_root)
+        except BackupRootError as exc:
+            issues.append(f"backup_root — {exc}")
 
     try:
         validate_schedule_time(settings.schedule.time)
