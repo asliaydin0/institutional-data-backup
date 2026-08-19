@@ -286,6 +286,12 @@ class SettingsPage(QWidget):
         if chosen:
             self._root.setText(chosen)
 
+    def _set_form_row_enabled(self, widget: QWidget, enabled: bool) -> None:
+        widget.setEnabled(enabled)
+        label = self._form.labelForField(widget)
+        if label is not None:
+            label.setEnabled(enabled)
+
     def _sync_schedule_fields(self) -> None:
         enabled = self._enabled.isChecked()
         freq = self._schedule_freq.currentData()
@@ -295,17 +301,19 @@ class SettingsPage(QWidget):
             self._schedule_weekday,
             self._schedule_dom,
         ):
-            widget.setEnabled(enabled)
-        weekly = enabled and freq == "weekly"
-        monthly = enabled and freq == "monthly"
+            self._set_form_row_enabled(widget, enabled)
+        weekly = freq == "weekly"
+        monthly = freq == "monthly"
         self._schedule_weekday.setVisible(weekly)
         self._schedule_dom.setVisible(monthly)
         label_week = self._form.labelForField(self._schedule_weekday)
         if label_week is not None:
             label_week.setVisible(weekly)
+            label_week.setEnabled(enabled)
         label_dom = self._form.labelForField(self._schedule_dom)
         if label_dom is not None:
             label_dom.setVisible(monthly)
+            label_dom.setEnabled(enabled)
 
     def _schedule_values(self) -> tuple[bool, str, str, int, int]:
         qtime = self._time_edit.time()
@@ -329,17 +337,19 @@ class SettingsPage(QWidget):
             self._retention_weekday,
             self._retention_dom,
         ):
-            widget.setEnabled(enabled)
-        weekly = enabled and freq == "weekly"
-        monthly = enabled and freq == "monthly"
+            self._set_form_row_enabled(widget, enabled)
+        weekly = freq == "weekly"
+        monthly = freq == "monthly"
         self._retention_weekday.setVisible(weekly)
         self._retention_dom.setVisible(monthly)
         label_week = self._form.labelForField(self._retention_weekday)
         if label_week is not None:
             label_week.setVisible(weekly)
+            label_week.setEnabled(enabled)
         label_dom = self._form.labelForField(self._retention_dom)
         if label_dom is not None:
             label_dom.setVisible(monthly)
+            label_dom.setEnabled(enabled)
 
     def _retention_values(self) -> tuple[bool, int, str, str, int, int]:
         qtime = self._retention_time.time()

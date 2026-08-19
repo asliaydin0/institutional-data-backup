@@ -20,6 +20,9 @@ QDialog {
     font-size: 13px;
     color: #1a2332;
 }
+*:disabled {
+    color: #9aa5b4;
+}
 QWidget#ContentArea {
     background: #eef1f5;
 }
@@ -322,6 +325,20 @@ QLineEdit, QComboBox, QDateEdit {
 QLineEdit:focus, QComboBox:focus, QDateEdit:focus,
 QSpinBox:focus, QTimeEdit:focus {
     border-color: #1a4f8b;
+}
+QLineEdit:disabled, QComboBox:disabled, QDateEdit:disabled,
+QSpinBox:disabled, QTimeEdit:disabled {
+    background: #f0f2f5;
+    color: #9aa5b4;
+    border-color: #e2e6ec;
+}
+QSpinBox:disabled::up-button, QTimeEdit:disabled::up-button,
+QSpinBox:disabled::down-button, QTimeEdit:disabled::down-button {
+    background-color: #eef1f5;
+    border-color: #e2e6ec;
+}
+QLabel:disabled, QLabel#Muted:disabled, QLabel#MutedLabel:disabled {
+    color: #9aa5b4;
 }
 QComboBox::drop-down {
     border: none;
