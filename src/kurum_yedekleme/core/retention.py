@@ -17,6 +17,8 @@ class RetentionResult:
     deleted_files: int = 0
     deleted_bytes: int = 0
     removed_dirs: int = 0
+    kept_files: int = 0
+    cutoff_date: str = ""
     errors: list[str] = field(default_factory=list)
     deleted_paths: list[str] = field(default_factory=list)
 
@@ -63,6 +65,7 @@ def purge_old_backups(
     if moment.tzinfo is None:
         moment = moment.astimezone()
     cutoff = moment.date() - timedelta(days=int(keep_days))
+    result.cutoff_date = cutoff.isoformat()
 
     try:
         area_dirs = [p for p in root.iterdir() if p.is_dir()]
@@ -81,6 +84,15 @@ def purge_old_backups(
             if folder_date is None:
                 continue
             if folder_date >= cutoff:
+                try:
+                    kept_zips = [
+                        p
+                        for p in date_dir.iterdir()
+                        if p.is_file() and p.suffix.lower() == ".zip"
+                    ]
+                except OSError:
+                    kept_zips = []
+                result.kept_files += len(kept_zips)
                 continue
             try:
                 zip_files = [p for p in date_dir.iterdir() if p.is_file() and p.suffix.lower() == ".zip"]
@@ -122,5 +134,13 @@ def purge_old_backups(
             result.deleted_files,
             result.removed_dirs,
             operation="finish",
+        )
+    else:
+        logger.info(
+            "Silinecek eski ZIP yok. Saklama %s gün — %s ve sonrası korunur "
+            "(%s ZIP duruyor). Bugün alınan yedek silinmez.",
+            keep_days,
+            result.cutoff_date,
+            result.kept_files,
         )
     return result

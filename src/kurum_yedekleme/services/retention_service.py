@@ -28,6 +28,8 @@ class RetentionRunRecord:
     deleted_files: int
     deleted_bytes: int
     removed_dirs: int
+    kept_files: int
+    cutoff_date: str
     deleted_paths: list[str]
     errors: list[str]
     keep_days: int
@@ -64,13 +66,24 @@ class RetentionService:
         return self._settings.retention
 
     def update_settings(self, settings: AppSettings) -> None:
+        previous = self._settings
         self._settings = settings
+        if self._plan_changed(previous, settings):
+            self.release_period_lock()
+            logger.info(
+                "Temizlik planı değişti; bugünkü tekrar çalıştırma serbest "
+                "(saat/saklama/kök güncellendi)."
+            )
 
     def run_if_due(self, period_key: str) -> RetentionResult | None:
         if not self._settings.retention.enabled:
             return None
         if self._load_state() == period_key:
-            logger.debug("Temizlik bu dönemde zaten çalıştı: %s", period_key)
+            logger.info(
+                "Temizlik atlandı: bu dönem zaten çalıştı (%s). "
+                "Yeni bir deneme için saati veya saklama süresini değiştirin.",
+                period_key,
+            )
             return None
         result = self.run_now(period_key=period_key)
         return result
@@ -102,9 +115,12 @@ class RetentionService:
             )
         else:
             logger.info(
-                "Temizlik başarılı: %s dosya silindi, %s boş klasör",
+                "Temizlik başarılı: %s dosya silindi, %s boş klasör, "
+                "%s ZIP korundu (saklama %s gün)",
                 result.deleted_files,
                 result.removed_dirs,
+                result.kept_files,
+                retention.keep_days,
                 operation="finish",
             )
         return result
@@ -129,6 +145,8 @@ class RetentionService:
             deleted_files=int(raw.get("deleted_files") or 0),
             deleted_bytes=int(raw.get("deleted_bytes") or 0),
             removed_dirs=int(raw.get("removed_dirs") or 0),
+            kept_files=int(raw.get("kept_files") or 0),
+            cutoff_date=str(raw.get("cutoff_date") or ""),
             deleted_paths=[str(p) for p in paths],
             errors=[str(e) for e in errors],
             keep_days=int(raw.get("keep_days") or 0),
@@ -143,6 +161,34 @@ class RetentionService:
             return None
         key = str(raw.get("period_key") or "").strip()
         return key or None
+
+    def release_period_lock(self) -> None:
+        """Aynı gün/hafta içinde plan değişince tekrar çalışmaya izin ver."""
+        raw = self._read_state_raw()
+        if not raw or not raw.get("period_key"):
+            return
+        raw["period_key"] = None
+        try:
+            self._state_path.write_text(
+                json.dumps(raw, ensure_ascii=False, indent=2) + "\n",
+                encoding="utf-8",
+            )
+        except OSError as exc:
+            logger.warning("Temizlik dönem kilidi kaldırılamadı: %s", exc)
+
+    @staticmethod
+    def _plan_changed(previous: AppSettings, current: AppSettings) -> bool:
+        old = previous.retention
+        new = current.retention
+        return (
+            previous.backup_root != current.backup_root
+            or old.enabled != new.enabled
+            or old.keep_days != new.keep_days
+            or old.frequency != new.frequency
+            or old.time != new.time
+            or old.weekday != new.weekday
+            or old.day_of_month != new.day_of_month
+        )
 
     def _prepare_root(self) -> Path:
         root = Path(self._settings.backup_root)
@@ -186,6 +232,8 @@ class RetentionService:
             "deleted_files": result.deleted_files,
             "deleted_bytes": result.deleted_bytes,
             "removed_dirs": result.removed_dirs,
+            "kept_files": result.kept_files,
+            "cutoff_date": result.cutoff_date,
             "deleted_paths": result.deleted_paths,
             "errors": result.errors[:20],
             "keep_days": self._settings.retention.keep_days,

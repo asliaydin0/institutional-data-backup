@@ -119,9 +119,18 @@ class SettingsPage(QWidget):
         self._retention_keep.setSuffix(" gün")
         self._retention_keep.setValue(settings.retention.keep_days)
         self._retention_keep.setToolTip(
-            "Bu süreden daha eski tarih klasörlerindeki ZIP dosyaları silinir."
+            "Bu süreden daha eski tarihli yedek ZIP’leri silinir. "
+            "Bugün alınan yedek asla silinmez. "
+            "Örn. 1 gün: yalnızca dünden önceki klasörlerdeki ZIP silinir."
         )
         form.addRow("Saklama süresi:", self._retention_keep)
+        self._retention_keep_hint = QLabel(
+            "Bugün alınan yedek silinmez. Test için eski tarihli bir klasör kullanın "
+            "(ör. 2020-01-01_12-00-00)."
+        )
+        self._retention_keep_hint.setObjectName("Muted")
+        self._retention_keep_hint.setWordWrap(True)
+        form.addRow("", self._retention_keep_hint)
 
         self._retention_freq = QComboBox()
         self._retention_freq.addItem("Günlük", "daily")
@@ -314,6 +323,7 @@ class SettingsPage(QWidget):
         freq = self._retention_freq.currentData()
         for widget in (
             self._retention_keep,
+            self._retention_keep_hint,
             self._retention_freq,
             self._retention_time,
             self._retention_weekday,

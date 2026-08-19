@@ -155,15 +155,12 @@ class RetentionScheduler:
         return True
 
     def _loop(self) -> None:
-        try:
-            self.run_missed_if_needed()
-        except Exception:
-            logger.exception("Açılış missed-retention kontrolü hatası")
         while not self._stop_event.is_set():
             try:
                 self.tick()
+                self.run_missed_if_needed()
             except Exception:
-                logger.exception("Temizlik zamanlayıcı tick hatası")
+                logger.exception("Temizlik zamanlayıcı döngü hatası")
             self._idle.wait(self._poll_interval)
             self._idle.clear()
 

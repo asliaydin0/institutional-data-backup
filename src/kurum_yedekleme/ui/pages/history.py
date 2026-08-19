@@ -189,9 +189,16 @@ class HistoryPage(QWidget):
         )
         self._set_cleanup_chip(f"Temizlik: {record.status_label_tr}", chip_style)
         if record.deleted_files == 0 and not record.errors:
+            kept = (
+                f" {record.kept_files} ZIP saklama süresi içinde korundu."
+                if record.kept_files
+                else ""
+            )
             self._cleanup_summary.setText(
                 f"{local.strftime('%d.%m.%Y %H:%M')} — silinecek eski ZIP yoktu "
-                f"(saklama {record.keep_days} gün)."
+                f"(saklama {record.keep_days} gün; "
+                f"{record.cutoff_date or 'eşik'} öncesi silinir)."
+                f"{kept} Bugün alınan yedek silinmez."
             )
         elif record.errors:
             self._cleanup_summary.setText(
