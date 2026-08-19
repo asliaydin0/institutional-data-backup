@@ -193,6 +193,9 @@ def _run_smoke_gui() -> int:
 
 
 def main(argv: Optional[list[str]] = None) -> int:
+    from kurum_yedekleme.utils.sitepath import ensure_src_pth
+
+    ensure_src_pth()
     args_list = argv if argv is not None else sys.argv
     cli = _parse_args(args_list)
 

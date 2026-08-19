@@ -22,13 +22,19 @@ $python = Join-Path $Root ".venv\Scripts\python.exe"
 Write-Host "pip güncelleniyor..."
 & $python -m pip install --upgrade pip
 
-Write-Host "Bağımlılıklar kuruluyor (PySide6-Essentials + PyYAML)..."
+Write-Host "Bağımlılıklar kuruluyor..."
 & $pip install --no-cache-dir -r requirements.txt
+
+Write-Host "Paket src yolu venv'e bağlanıyor (servis import'u için)..."
+$src = Join-Path $Root "src"
+$pth = Join-Path $Root ".venv\Lib\site-packages\kurum_yedekleme_src.pth"
+Set-Content -Path $pth -Value $src -Encoding utf8
+& $pip install -e .
 
 Write-Host ""
 Write-Host "Tamam. Etkinleştirmek için:"
 Write-Host "  .\.venv\Scripts\Activate.ps1"
 Write-Host "Çalıştırmak için:"
-Write-Host "  `$env:PYTHONPATH='src'; python -m kurum_yedekleme"
+Write-Host "  python -m kurum_yedekleme --test-mode"
 Write-Host "Duman testi:"
-Write-Host "  `$env:PYTHONPATH='src'; python scripts\smoke_test.py"
+Write-Host "  python scripts\smoke_test.py"

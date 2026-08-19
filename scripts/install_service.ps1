@@ -15,6 +15,7 @@ Write-Host "Python: $python"
 
 $env:PYTHONPATH = "src"
 & $python -m pip install -q pywin32
+& $python -c "from kurum_yedekleme.utils.sitepath import ensure_src_pth; ensure_src_pth()"
 & $python -m kurum_yedekleme --install-service
 if ($LASTEXITCODE -ne 0) {
     Write-Error "Servis kurulumu başarısız. Yönetici olarak çalıştırın; pywin32 kurulu olmalı."

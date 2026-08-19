@@ -31,12 +31,29 @@ Proje kökünde PowerShell:
 cd C:\yol\KurumYedekleme\KurumYedekleme
 .\scripts\create_venv.ps1
 .\.venv\Scripts\Activate.ps1
-$env:PYTHONPATH = "src"
 ```
 
-`create_venv.ps1` sanal ortamı oluşturur ve `requirements.txt` bağımlılıklarını kurar.
+`create_venv.ps1` sanal ortamı oluşturur, bağımlılıkları kurar ve `src` paketini venv'e bağlar. Bundan sonra `PYTHONPATH` gerekmez.
 
-Her yeni terminal oturumunda `Activate.ps1` ve `PYTHONPATH` tekrar gerekir.
+## Kendi PC ve kurum PC
+
+| Ortam | Ne için | Nasıl çalıştırılır |
+|-------|---------|-------------------|
+| **Kendi PC** (geliştirme) | Kod, arayüz, test | `python -m kurum_yedekleme --test-mode` — **E: gerekmez**, Windows Service **gerekmez** |
+| **Kurum PC** (üretim) | Gerçek yedek | `E:\Yedekler` olmalı; GUI + Windows Service **yönetici** olarak kurulur |
+
+Kendi PC’de servis kurmaya çalışmayın: yönetici isteseniz bile yedek kökü `E:\Yedekler` bu makinede yoksa üretim yedeği yazılmaz. Geliştirmeyi TEST MODE ile yapın.
+
+Kurum PC’de ilk kurulum (Yönetici PowerShell):
+
+```powershell
+cd C:\Kurulum\KurumYedekleme
+.\scripts\create_venv.ps1
+.\.venv\Scripts\Activate.ps1
+.\scripts\install_service.ps1
+```
+
+Ardından GUI’yi **Yönetici olarak çalıştır** ile açın; Ayarlar’dan servisin **Çalışıyor** olduğunu doğrulayın. Günlük kullanımda GUI’yi yönetici açmanız gerekmez; servis arka planda LocalSystem olarak çalışır. Servisi kur / başlat / durdur / kaldır için yine yönetici gerekir.
 
 ## Yapılandırma
 
@@ -67,9 +84,23 @@ Retry ve ZIP sıkıştırma ayarları kodda varsayılan değerlerle çalışır;
 
 ## Çalıştırma
 
-Sanal ortam aktif ve `PYTHONPATH=src` ayarlı iken:
+Sanal ortam aktifken:
 
-### Üretim GUI (E:\Yedekler, config.yaml)
+### Kendi PC — TEST MODE (önerilen)
+
+```powershell
+python -m kurum_yedekleme --test-mode
+```
+
+Gerçek kurum kaynaklarına ve `E:\Yedekler` üretim klasörüne **dokunmaz**. Yedekler `tests/test_data/yedekler` altına yazılır; otomatik yedekleme pencere açıkken çalışır.
+
+Headless test yedeklemesi (GUI yok):
+
+```powershell
+python -m kurum_yedekleme --run-test-backup
+```
+
+### Kurum PC — üretim GUI (`E:\Yedekler`, config.yaml)
 
 ```powershell
 python -m kurum_yedekleme
@@ -79,20 +110,6 @@ Tray’de başlat (pencere gizli):
 
 ```powershell
 python -m kurum_yedekleme --tray
-```
-
-### TEST MODE (yerel test, E: gerekmez)
-
-Gerçek kurum kaynaklarına ve `E:\Yedekler` üretim klasörüne **dokunmaz**. Yedekler `tests/test_data/yedekler` altına yazılır; otomatik yedekleme pencere açıkken çalışır.
-
-```powershell
-python -m kurum_yedekleme --test-mode
-```
-
-Headless test yedeklemesi (GUI yok):
-
-```powershell
-python -m kurum_yedekleme --run-test-backup
 ```
 
 ### Windows Service (production otomatik yedek)
@@ -205,7 +222,6 @@ Parola / token logda `***` olur. Kaynak dosya içerikleri loglanmaz.
 
 ```powershell
 .\.venv\Scripts\Activate.ps1
-$env:PYTHONPATH = "src"
 $env:QT_QPA_PLATFORM = "offscreen"
 $env:KURUM_YEDEKLEME_NO_TRAY = "1"
 python -m pytest tests -q

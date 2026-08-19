@@ -92,6 +92,11 @@ def start_service() -> None:
         raise RuntimeError(
             "Servis kurulu değil. Önce «Servisi Kur» ile yükleyin."
         )
+    if not is_user_admin():
+        raise RuntimeError(
+            "Servis başlatmak yönetici yetkisi gerektirir.\n\n"
+            "Uygulamayı «Yönetici olarak çalıştır» ile açın."
+        )
     result = _run_sc(["start", SERVICE_NAME])
     if result.returncode != 0:
         detail = (result.stderr or result.stdout or "").strip()

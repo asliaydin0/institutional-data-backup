@@ -100,13 +100,41 @@ def _service_util():
 
 
 def _configure_installed_service() -> None:
+    from kurum_yedekleme.utils.sitepath import ensure_src_pth, src_root
+
+    ensure_src_pth()
     _, win32serviceutil = _service_util()
     root = str(get_project_root())
     win32serviceutil.SetServiceCustomOption(SERVICE_NAME, "AppDirectory", root)
+    _set_service_pythonpath(src_root())
+
+
+def _set_service_pythonpath(src: Path) -> None:
+    """LocalSystem sürecine PYTHONPATH ver (SCM Environment)."""
+    try:
+        import win32api
+        import win32con
+    except ImportError:
+        return
+    key = win32api.RegCreateKey(
+        win32con.HKEY_LOCAL_MACHINE,
+        rf"SYSTEM\CurrentControlSet\Services\{SERVICE_NAME}",
+    )
+    try:
+        win32api.RegSetValueEx(
+            key,
+            "Environment",
+            0,
+            win32con.REG_MULTI_SZ,
+            [f"PYTHONPATH={src}"],
+        )
+    finally:
+        win32api.RegCloseKey(key)
 
 
 def install_win32_service() -> None:
     from kurum_yedekleme.services.windows_service import is_user_admin, query_service
+    from kurum_yedekleme.utils.sitepath import ensure_src_pth
 
     if not is_user_admin():
         raise RuntimeError(
@@ -115,6 +143,7 @@ def install_win32_service() -> None:
             "Yönetici PowerShell'de scripts\\install_service.ps1 çalıştırın."
         )
 
+    ensure_src_pth()
     cls, util = _service_util()
     status = query_service()
     command = "update" if status.state != "not_installed" else "install"
