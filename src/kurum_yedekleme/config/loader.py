@@ -99,7 +99,7 @@ def _build_settings(raw: dict[str, Any]) -> AppSettings:
 
     return AppSettings(
         app=AppConfig(
-            name=str(app_raw.get("name", "Kurum Yedekleme")),
+            name=str(app_raw.get("name", "Veri Yedekleme Sistemi")),
             language=str(app_raw.get("language", "tr")),
             data_dir=str(app_raw.get("data_dir", "./data")),
             log_dir=str(app_raw.get("log_dir", "./logs")),

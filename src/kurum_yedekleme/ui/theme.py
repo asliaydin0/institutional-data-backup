@@ -39,21 +39,23 @@ QFrame#Sidebar QLabel {
 QLabel#BrandEmblem {
     background: #1a4f8b;
     color: #ffffff;
-    font-size: 13px;
+    font-size: 12px;
     font-weight: 800;
+    letter-spacing: 0.4px;
     border-radius: 8px;
-    min-width: 42px;
-    max-width: 42px;
-    min-height: 42px;
-    max-height: 42px;
+    min-width: 46px;
+    max-width: 46px;
+    min-height: 46px;
+    max-height: 46px;
     border: 1px solid #2a6cb8;
 }
 QLabel#BrandTitle {
     background: transparent;
     color: #ffffff;
-    font-size: 15px;
+    font-size: 13px;
     font-weight: 700;
     padding: 0;
+    line-height: 1.2;
 }
 QLabel#BrandSubtitle {
     background: transparent;

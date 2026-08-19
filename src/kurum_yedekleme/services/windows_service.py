@@ -15,7 +15,7 @@ from kurum_yedekleme.utils.paths import get_project_root, is_frozen
 logger = logging.getLogger(__name__)
 
 SERVICE_NAME = "KurumYedekleme"
-SERVICE_DISPLAY = "Kurum Yedekleme"
+SERVICE_DISPLAY = "Veri Yedekleme Sistemi"
 ServiceState = Literal["running", "stopped", "not_installed", "unknown"]
 
 

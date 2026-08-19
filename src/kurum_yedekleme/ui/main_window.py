@@ -21,7 +21,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from kurum_yedekleme import __app_name__, __version__
+from kurum_yedekleme import __app_emblem__, __app_name__, __app_subtitle__, __version__
 from kurum_yedekleme.config.schema import AppSettings
 from kurum_yedekleme.core.lock import BackupInProgressError
 from kurum_yedekleme.core.progress import BackupProgressEvent
@@ -86,7 +86,7 @@ class MainWindow(QMainWindow):
 
         brand_row = QHBoxLayout()
         brand_row.setSpacing(12)
-        emblem = QLabel("KY")
+        emblem = QLabel(__app_emblem__)
         emblem.setObjectName("BrandEmblem")
         emblem.setAlignment(Qt.AlignmentFlag.AlignCenter)
         brand_col = QVBoxLayout()
@@ -95,7 +95,7 @@ class MainWindow(QMainWindow):
         brand.setObjectName("BrandTitle")
         brand.setWordWrap(True)
         sub = QLabel(
-            "TEST MODU" if self._test_mode else "Kurumsal Yedekleme Sistemi"
+            "TEST MODU" if self._test_mode else __app_subtitle__
         )
         sub.setObjectName("BrandSubtitle")
         if self._test_mode:

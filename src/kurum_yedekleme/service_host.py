@@ -65,7 +65,7 @@ def run_service_loop(
         runtime = build_runtime(settings, test_mode=False)
 
     assert runtime is not None
-    logger.info("Kurum Yedekleme servis döngüsü başlıyor (test_mode=%s)", test)
+    logger.info("Veri Yedekleme Sistemi servis döngüsü başlıyor (test_mode=%s)", test)
     runtime.events.log_event(
         level="INFO",
         component="service",

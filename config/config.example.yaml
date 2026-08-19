@@ -1,5 +1,5 @@
 app:
-  name: "Kurum Yedekleme"
+  name: "Veri Yedekleme Sistemi"
   language: "tr"
   data_dir: "./data"
   log_dir: "./logs"

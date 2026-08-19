@@ -18,7 +18,7 @@ DEFAULT_BACKUP_ROOT = r"E:\Yedekler"
 
 @dataclass(frozen=True)
 class AppConfig:
-    name: str = "Kurum Yedekleme"
+    name: str = "Veri Yedekleme Sistemi"
     language: str = "tr"
     data_dir: str = "./data"
     log_dir: str = "./logs"
