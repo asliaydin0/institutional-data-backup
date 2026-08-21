@@ -12,6 +12,7 @@ from kurum_yedekleme.utils.app_logger import ensure_record_fields, get_logger
 from kurum_yedekleme.utils.log_filter import SensitiveDataFilter
 
 LOG_FILE_NAME = "kurum_yedekleme.log"
+SERVICE_LOG_FILE_NAME = "kurum_yedekleme_service.log"
 # Eski logların sınırsız büyümesini engelle
 MAX_BACKUP_COUNT = 30
 DEFAULT_BACKUP_COUNT = 10
@@ -86,6 +87,7 @@ def setup_logging(
     config: Optional[LoggingConfig] = None,
     *,
     also_console: bool = True,
+    file_name: str | None = None,
 ) -> Path:
     """
     Uygulama genelinde log sistemini kurar.
@@ -101,7 +103,7 @@ def setup_logging(
     cfg = config or LoggingConfig()
     log_dir = Path(log_dir)
     log_dir.mkdir(parents=True, exist_ok=True)
-    log_file = resolve_log_file(log_dir)
+    log_file = Path(log_dir) / (file_name or LOG_FILE_NAME)
 
     level = getattr(logging, cfg.level.upper(), logging.INFO)
     root = logging.getLogger()

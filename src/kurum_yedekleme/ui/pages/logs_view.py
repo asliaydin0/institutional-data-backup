@@ -56,7 +56,8 @@ class LogsPage(QWidget):
         )
 
         hint = QLabel(
-            "Klasör: logs/ — satır biçimi: Tarih Saat SEVİYE Modül İşlem - Mesaj"
+            "GUI: kurum_yedekleme.log — Servis: kurum_yedekleme_service.log "
+            "ve service_boot.log. Satır: Tarih Saat SEVİYE Modül İşlem - Mesaj"
         )
         hint.setObjectName("MutedLabel")
         layout.addWidget(hint)

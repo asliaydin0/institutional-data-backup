@@ -62,11 +62,11 @@ class ScheduleService:
         self._clock = clock or (lambda: datetime.now().astimezone())
         self._stop_event = threading.Event()
         self._idle = threading.Event()
-        self._pending_missed_check = False
         self._thread: Optional[threading.Thread] = None
         self._lock = threading.RLock()
         self._last_job: Optional[JobResult] = None
         self._fired_minute: Optional[tuple[int, int, int, int, int]] = None
+        self._repeat_in_period = False
 
     @property
     def schedule(self) -> ScheduleConfig:
@@ -80,9 +80,18 @@ class ScheduleService:
     def update_schedule(self, schedule: ScheduleConfig) -> None:
         validated = validate_schedule_settings(schedule)
         with self._lock:
+            previous = self._schedule
+            plan_changed = (
+                previous.enabled != validated.enabled
+                or previous.frequency != validated.frequency
+                or previous.time != validated.time
+                or previous.weekday != validated.weekday
+                or previous.day_of_month != validated.day_of_month
+            )
             self._schedule = validated
-            self._pending_missed_check = True
             self._fired_minute = None
+            if plan_changed and validated.enabled:
+                self._repeat_in_period = True
         self._idle.set()
         logger.info(
             "Zamanlayıcı güncellendi: enabled=%s freq=%s time=%s",
@@ -90,6 +99,10 @@ class ScheduleService:
             validated.frequency,
             validated.time,
         )
+        if plan_changed and validated.enabled:
+            logger.info(
+                "Yedekleme planı değişti; bu dönemde otomatik yedek tekrar çalışabilir."
+            )
 
     @property
     def is_running(self) -> bool:
@@ -150,6 +163,15 @@ class ScheduleService:
                 return False
             self._fired_minute = minute_key
 
+        pending = self._pending_automatic_areas(now=moment, schedule=schedule)
+        if not pending:
+            logger.info(
+                "Planlanan otomatik yedek saati geldi (%s) ancak bu dönemde "
+                "aktif alanlar zaten yedeklenmiş. Yeni deneme için saati "
+                "değiştirip Ayarlar’dan kaydedin.",
+                schedule.time,
+            )
+            return False
         return self.run_automatic_if_needed(now=moment)
 
     def check_missed_backup(
@@ -196,6 +218,7 @@ class ScheduleService:
 
         with self._lock:
             schedule = self._schedule
+            repeat = self._repeat_in_period
 
         pending = self._pending_automatic_areas(now=moment, schedule=schedule)
         if not pending:
@@ -216,7 +239,7 @@ class ScheduleService:
             self._last_job = self._backups.run(
                 pending,
                 backup_type=BackupType.AUTOMATIC,
-                skip_successful_automatic_in_period=True,
+                skip_successful_automatic_in_period=not repeat,
                 schedule_frequency=schedule.frequency,
             )
         except BackupInProgressError:
@@ -225,6 +248,8 @@ class ScheduleService:
         except Exception:
             logger.exception("Otomatik yedekleme hatası")
             return False
+        with self._lock:
+            self._repeat_in_period = False
         return True
 
     def next_run_at(self, now: Optional[datetime] = None) -> Optional[datetime]:
@@ -243,8 +268,13 @@ class ScheduleService:
         now: datetime,
         schedule: ScheduleConfig,
     ) -> list[BackupArea]:
+        enabled = self._areas.list_enabled()
+        with self._lock:
+            repeat = self._repeat_in_period
+        if repeat:
+            return list(enabled)
         pending: list[BackupArea] = []
-        for area in self._areas.list_enabled():
+        for area in enabled:
             if area.id is None:
                 pending.append(area)
                 continue
@@ -256,27 +286,13 @@ class ScheduleService:
                 pending.append(area)
         return pending
 
-    def _consume_missed_check(self) -> bool:
-        with self._lock:
-            pending = self._pending_missed_check
-            self._pending_missed_check = False
-            return pending
-
     def _loop(self) -> None:
-        try:
-            self.run_missed_if_needed()
-        except Exception:
-            logger.exception("Açılış missed-backup kontrolü hatası")
         while not self._stop_event.is_set():
-            if self._consume_missed_check():
-                try:
-                    self.run_missed_if_needed()
-                except Exception:
-                    logger.exception("Ayar sonrası missed-backup kontrolü hatası")
             try:
                 self.tick()
+                self.run_missed_if_needed()
             except Exception:
-                logger.exception("Zamanlayıcı tick hatası")
+                logger.exception("Zamanlayıcı döngü hatası")
             self._idle.wait(self._poll_interval)
             self._idle.clear()
 

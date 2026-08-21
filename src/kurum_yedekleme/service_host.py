@@ -13,8 +13,8 @@ from kurum_yedekleme.config.loader import default_config_path, load_settings
 from kurum_yedekleme.config.schema import AppSettings
 from kurum_yedekleme.core.lock import BackupInProgressError
 from kurum_yedekleme.services.runtime import AppRuntime, build_runtime
-from kurum_yedekleme.utils.logging_setup import setup_logging
-from kurum_yedekleme.utils.paths import resolve_under_root
+from kurum_yedekleme.utils.logging_setup import SERVICE_LOG_FILE_NAME, setup_logging
+from kurum_yedekleme.utils.paths import get_project_root, resolve_under_root
 
 logger = logging.getLogger(__name__)
 
@@ -61,7 +61,12 @@ def run_service_loop(
         assert settings is not None
         log_dir = resolve_under_root(settings.app.log_dir)
         log_dir.mkdir(parents=True, exist_ok=True)
-        setup_logging(log_dir, settings.logging, also_console=False)
+        setup_logging(
+            log_dir,
+            settings.logging,
+            also_console=False,
+            file_name=SERVICE_LOG_FILE_NAME,
+        )
         runtime = build_runtime(settings, test_mode=False)
 
     assert runtime is not None
@@ -75,9 +80,20 @@ def run_service_loop(
     runtime.retention_scheduler.start()
     config_path = default_config_path()
     last_mtime = _file_mtime(config_path)
+    last_beat = 0.0
+    last_info = 0.0
     try:
         while not stop.is_set():
             time.sleep(0.5)
+            now_ts = time.time()
+            if now_ts - last_beat >= 60:
+                last_beat = now_ts
+                _write_heartbeat(runtime.data_dir)
+            if now_ts - last_info >= 300:
+                last_info = now_ts
+                nxt = runtime.schedule.next_run_at()
+                nxt_txt = nxt.strftime("%d.%m.%Y %H:%M") if nxt else "—"
+                logger.info("Servis ayakta. Sonraki otomatik yedek: %s", nxt_txt)
             if test:
                 continue
             mtime = _file_mtime(config_path)
@@ -122,3 +138,15 @@ def _file_mtime(path: Path) -> float:
         return path.stat().st_mtime
     except OSError:
         return 0.0
+
+
+def _write_heartbeat(data_dir: Path) -> None:
+    path = Path(data_dir) / "service_heartbeat.txt"
+    try:
+        path.write_text(
+            f"{time.strftime('%Y-%m-%d %H:%M:%S')} pid={os.getpid()} "
+            f"root={get_project_root()}\n",
+            encoding="utf-8",
+        )
+    except OSError:
+        pass

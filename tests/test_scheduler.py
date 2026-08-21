@@ -124,3 +124,20 @@ def test_update_schedule_runs_missed_while_running(runtime, area_source):
         assert last.backup_type == BackupType.AUTOMATIC
     finally:
         runtime.schedule.stop()
+
+
+def test_schedule_time_change_allows_same_day_rerun(runtime, area_source):
+    runtime.areas.add_area(name="Personel", source_path=str(area_source))
+    runtime.schedule.update_schedule(ScheduleConfig(enabled=True, time="02:00"))
+    now = datetime.now().astimezone().replace(hour=8, minute=0, second=0, microsecond=0)
+    assert runtime.schedule.run_missed_if_needed(now=now) is True
+    first = runtime.history.get_last_by_type(BackupType.AUTOMATIC)
+    assert first is not None
+    runtime.schedule.update_schedule(ScheduleConfig(enabled=True, time="08:05"))
+    assert runtime.schedule.run_missed_if_needed(now=now.replace(minute=10)) is True
+    rows = [
+        r
+        for r in runtime.history.get_last_n(10)
+        if r.backup_type == BackupType.AUTOMATIC and r.status == BackupStatus.SUCCESS
+    ]
+    assert len(rows) >= 2
