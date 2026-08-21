@@ -46,6 +46,25 @@ def resolve_log_file(log_dir: Path) -> Path:
     return Path(log_dir) / LOG_FILE_NAME
 
 
+class SharedAppendFileHandler(logging.Handler):
+    """Her kayıtta dosyayı açıp kapatır; GUI ve servis aynı dosyayı paylaşabilir."""
+
+    def __init__(self, filename: Path) -> None:
+        super().__init__()
+        self._filename = Path(filename)
+
+    def emit(self, record: logging.LogRecord) -> None:
+        try:
+            self._filename.parent.mkdir(parents=True, exist_ok=True)
+            line = self.format(record) + "\n"
+            with open(
+                self._filename, "a", encoding="utf-8", errors="replace"
+            ) as handle:
+                handle.write(line)
+        except Exception:
+            self.handleError(record)
+
+
 def _build_file_handler(
     log_file: Path,
     cfg: LoggingConfig,
@@ -88,6 +107,7 @@ def setup_logging(
     *,
     also_console: bool = True,
     file_name: str | None = None,
+    mirror_file_name: str | None = None,
 ) -> Path:
     """
     Uygulama genelinde log sistemini kurar.
@@ -115,6 +135,15 @@ def setup_logging(
 
     file_handler = _build_file_handler(log_file, cfg, formatter, level)
     root.addHandler(file_handler)
+
+    if mirror_file_name:
+        mirror = Path(log_dir) / mirror_file_name
+        if mirror.resolve() != log_file.resolve():
+            extra = SharedAppendFileHandler(mirror)
+            extra.setFormatter(formatter)
+            extra.setLevel(level)
+            extra.addFilter(sensitive)
+            root.addHandler(extra)
 
     if also_console:
         console = logging.StreamHandler()

@@ -23,13 +23,19 @@ def qapp():
     return app
 
 
-def _area(area_id: int, name: str = "Alan", enabled: bool = True) -> BackupArea:
+def _area(
+    area_id: int,
+    name: str = "Alan",
+    enabled: bool = True,
+    auto_backup: bool = True,
+) -> BackupArea:
     now = datetime(2026, 1, 1)
     return BackupArea(
         id=area_id,
         name=name,
         source_path=rf"C:\Kaynak\{name}",
         enabled=enabled,
+        auto_backup=auto_backup,
         deleted=False,
         created_at=now,
         updated_at=now,
@@ -84,4 +90,12 @@ def test_rebuild_preserves_selection_when_area_renamed(qapp) -> None:
     page.set_areas([_area(1, "A"), _area(2, "B")])
     page._checks[1].setChecked(False)
     page.set_areas([_area(1, "A Yeni"), _area(2, "B")])
+    assert _checked_ids(page) == {1}
+
+
+def test_initial_checks_follow_auto_backup_flag(qapp) -> None:
+    page = BackupPage()
+    page.set_areas(
+        [_area(1, "A", auto_backup=True), _area(2, "B", auto_backup=False)]
+    )
     assert _checked_ids(page) == {1}

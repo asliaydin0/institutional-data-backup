@@ -165,12 +165,20 @@ class ScheduleService:
 
         pending = self._pending_automatic_areas(now=moment, schedule=schedule)
         if not pending:
-            logger.info(
-                "Planlanan otomatik yedek saati geldi (%s) ancak bu dönemde "
-                "aktif alanlar zaten yedeklenmiş. Yeni deneme için saati "
-                "değiştirip Ayarlar’dan kaydedin.",
-                schedule.time,
-            )
+            selected = self._areas.list_for_automatic()
+            if not selected:
+                logger.info(
+                    "Planlanan otomatik yedek saati geldi (%s) ancak "
+                    "Yedekleme ekranında işaretli aktif alan yok.",
+                    schedule.time,
+                )
+            else:
+                logger.info(
+                    "Planlanan otomatik yedek saati geldi (%s) ancak bu dönemde "
+                    "seçili alanlar zaten yedeklenmiş. Yeni deneme için saati "
+                    "değiştirip Ayarlar’dan kaydedin.",
+                    schedule.time,
+                )
             return False
         return self.run_automatic_if_needed(now=moment)
 
@@ -230,9 +238,10 @@ class ScheduleService:
             )
             return False
         logger.info(
-            "Otomatik yedekleme başlıyor (%s alan, %s)",
+            "Otomatik yedekleme başlıyor (%s alan, %s): %s",
             len(pending),
             schedule.frequency,
+            ", ".join(area.name for area in pending),
             operation="start",
         )
         try:
@@ -248,6 +257,30 @@ class ScheduleService:
         except Exception:
             logger.exception("Otomatik yedekleme hatası")
             return False
+        job = self._last_job
+        if job is not None:
+            logger.info(
+                "Otomatik yedekleme bitti: başarılı=%s başarısız=%s atlanan=%s",
+                job.success_count,
+                job.failed_count,
+                len(job.skipped),
+                operation="finish",
+            )
+            for item in job.results:
+                zip_name = item.zip_path.name if item.zip_path else "-"
+                logger.info(
+                    "Otomatik yedek kaydı: alan=%s durum=%s dosya=%s boyut=%s arşiv=%s",
+                    item.area.name,
+                    item.status.label_tr,
+                    item.file_count,
+                    item.zip_size,
+                    zip_name,
+                    operation="finish",
+                )
+            for skip in job.skipped:
+                logger.info("Otomatik yedek atlandı: %s", skip, operation="finish")
+            if job.error:
+                logger.error("Otomatik yedekleme: %s", job.error, operation="finish")
         with self._lock:
             self._repeat_in_period = False
         return True
@@ -268,7 +301,7 @@ class ScheduleService:
         now: datetime,
         schedule: ScheduleConfig,
     ) -> list[BackupArea]:
-        enabled = self._areas.list_enabled()
+        enabled = self._areas.list_for_automatic()
         with self._lock:
             repeat = self._repeat_in_period
         if repeat:

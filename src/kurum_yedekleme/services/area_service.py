@@ -25,6 +25,9 @@ class AreaService:
     def list_enabled(self) -> list[BackupArea]:
         return self._repo.list_enabled()
 
+    def list_for_automatic(self) -> list[BackupArea]:
+        return self._repo.list_for_automatic()
+
     def get(self, area_id: int) -> BackupArea:
         area = self._repo.get_by_id(area_id, include_deleted=False)
         if area is None:
@@ -37,6 +40,7 @@ class AreaService:
         name: str,
         source_path: str,
         enabled: bool = True,
+        auto_backup: bool = True,
         require_source: bool = True,
     ) -> BackupArea:
         cleaned_name = self._validate_name(name)
@@ -46,7 +50,10 @@ class AreaService:
             raise AreaError(f"Bu alan adı zaten kayıtlı: {cleaned_name}")
         try:
             return self._repo.insert(
-                name=cleaned_name, source_path=str(source), enabled=enabled
+                name=cleaned_name,
+                source_path=str(source),
+                enabled=enabled,
+                auto_backup=auto_backup,
             )
         except DatabaseError as exc:
             raise AreaError(str(exc)) from exc
@@ -79,6 +86,12 @@ class AreaService:
     def set_enabled(self, area_id: int, enabled: bool) -> BackupArea:
         try:
             return self._repo.set_enabled(area_id, enabled)
+        except DatabaseError as exc:
+            raise AreaError(str(exc)) from exc
+
+    def set_auto_backup(self, area_id: int, auto_backup: bool) -> BackupArea:
+        try:
+            return self._repo.set_auto_backup(area_id, auto_backup)
         except DatabaseError as exc:
             raise AreaError(str(exc)) from exc
 

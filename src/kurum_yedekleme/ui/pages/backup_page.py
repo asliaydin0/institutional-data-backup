@@ -22,6 +22,7 @@ from kurum_yedekleme.ui.widgets.section_panel import SectionPanel
 class BackupPage(QWidget):
     backup_requested = Signal(list)  # list[int] area ids
     cancel_requested = Signal()
+    auto_backup_toggled = Signal(int, bool)  # area_id, selected
 
     def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
@@ -32,7 +33,7 @@ class BackupPage(QWidget):
         layout.addWidget(
             PageHeader(
                 "Yedekleme",
-                "Manuel yedekleme bu ekrandan başlatılır. "
+                "İşaretli alanlar hem manuel hem otomatik yedekte alınır. "
                 "Otomatik yedekleme Windows Service tarafından yürütülür.",
             )
         )
@@ -70,7 +71,14 @@ class BackupPage(QWidget):
 
     def set_areas(self, areas: list[BackupArea]) -> None:
         snapshot = tuple(
-            (area.id, area.name, area.source_path, area.enabled, area.deleted)
+            (
+                area.id,
+                area.name,
+                area.source_path,
+                area.enabled,
+                area.deleted,
+                area.auto_backup,
+            )
             for area in areas
         )
         if snapshot == self._areas_snapshot:
@@ -101,15 +109,20 @@ class BackupPage(QWidget):
             box = QCheckBox(f"{area.name}  —  {area.source_path}")
             box.setProperty("area_id", area.id)
             box.setEnabled(bool(area.enabled) and not self._busy)
+            box.blockSignals(True)
             if selected_ids is None:
-                box.setChecked(bool(area.enabled))
+                box.setChecked(bool(area.enabled and area.auto_backup))
             else:
                 box.setChecked(bool(area.enabled and area.id in selected_ids))
+            box.blockSignals(False)
             if not area.enabled:
                 box.setText(box.text() + "  [pasif]")
             self._box.addWidget(box)
             self._checks.append(box)
-            box.toggled.connect(self._sync_select_all_label)
+            area_id = area.id
+            box.toggled.connect(
+                lambda checked, i=area_id: self._on_box_toggled(i, checked)
+            )
         self._sync_select_all_label()
 
     def _enabled_checks(self) -> list[QCheckBox]:
@@ -118,6 +131,11 @@ class BackupPage(QWidget):
     def _all_enabled_selected(self) -> bool:
         enabled = self._enabled_checks()
         return bool(enabled) and all(box.isChecked() for box in enabled)
+
+    def _on_box_toggled(self, area_id: int | None, checked: bool) -> None:
+        self._sync_select_all_label()
+        if area_id is not None:
+            self.auto_backup_toggled.emit(int(area_id), bool(checked))
 
     def _sync_select_all_label(self) -> None:
         if self._all_enabled_selected():

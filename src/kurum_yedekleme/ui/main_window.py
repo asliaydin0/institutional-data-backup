@@ -147,6 +147,7 @@ class MainWindow(QMainWindow):
         self._dashboard.preflight_requested.connect(self._on_preflight)
         self._backup_page.backup_requested.connect(self._on_selected_backup)
         self._backup_page.cancel_requested.connect(self._on_cancel)
+        self._backup_page.auto_backup_toggled.connect(self._on_auto_backup_toggled)
         self._areas_page.areas_changed.connect(self._refresh_all)
         self._settings_page.settings_saved.connect(self._on_settings_saved)
 
@@ -367,6 +368,12 @@ class MainWindow(QMainWindow):
             if area.id in area_ids and area.enabled:
                 selected.append(area)
         self._start_backup(selected)
+
+    def _on_auto_backup_toggled(self, area_id: int, selected: bool) -> None:
+        try:
+            self._runtime.areas.set_auto_backup(int(area_id), bool(selected))
+        except Exception as exc:
+            QMessageBox.warning(self, "Yedekleme", str(exc))
 
     def _on_cancel(self) -> None:
         if self._worker is not None:

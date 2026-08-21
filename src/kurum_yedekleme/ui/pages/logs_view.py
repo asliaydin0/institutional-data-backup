@@ -17,7 +17,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from kurum_yedekleme.utils.logging_setup import LOG_FILE_NAME
+from kurum_yedekleme.utils.logging_setup import LOG_FILE_NAME, SERVICE_LOG_FILE_NAME
 from kurum_yedekleme.ui.widgets.page_header import PageHeader
 from kurum_yedekleme.ui.widgets.section_panel import SectionPanel
 
@@ -57,7 +57,8 @@ class LogsPage(QWidget):
 
         hint = QLabel(
             "GUI: kurum_yedekleme.log — Servis: kurum_yedekleme_service.log "
-            "ve service_boot.log. Satır: Tarih Saat SEVİYE Modül İşlem - Mesaj"
+            "ve service_boot.log. Servis yedek kayıtları her iki dosyaya da yazılır. "
+            "Satır: Tarih Saat SEVİYE Modül İşlem - Mesaj"
         )
         hint.setObjectName("MutedLabel")
         layout.addWidget(hint)
@@ -135,7 +136,10 @@ class LogsPage(QWidget):
             if p.is_file()
             and (
                 p.name == LOG_FILE_NAME
+                or p.name == SERVICE_LOG_FILE_NAME
+                or p.name == "service_boot.log"
                 or p.name.startswith(f"{LOG_FILE_NAME}.")
+                or p.name.startswith(f"{SERVICE_LOG_FILE_NAME}.")
                 or (
                     p.suffix == ".log"
                     and "kurum_yedekleme" in p.name.lower()

@@ -64,6 +64,7 @@ class BackupArea:
     name: str
     source_path: str
     enabled: bool
+    auto_backup: bool
     deleted: bool
     created_at: datetime
     updated_at: datetime

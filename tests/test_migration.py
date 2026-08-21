@@ -26,7 +26,7 @@ def test_fresh_db_schema_v3(tmp_path: Path):
         row[1]
         for row in db.connect().execute("PRAGMA table_info(backup_areas)").fetchall()
     }
-    assert {"id", "name", "source_path", "enabled", "deleted"} <= area_cols
+    assert {"id", "name", "source_path", "enabled", "deleted", "auto_backup"} <= area_cols
     db.close()
 
 

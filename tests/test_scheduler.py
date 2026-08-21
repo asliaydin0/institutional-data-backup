@@ -141,3 +141,25 @@ def test_schedule_time_change_allows_same_day_rerun(runtime, area_source):
         if r.backup_type == BackupType.AUTOMATIC and r.status == BackupStatus.SUCCESS
     ]
     assert len(rows) >= 2
+
+
+def test_automatic_only_backs_up_selected_areas(runtime, tmp_path):
+    selected_src = tmp_path / "OrtakAlan" / "Secili"
+    other_src = tmp_path / "OrtakAlan" / "Haric"
+    for src in (selected_src, other_src):
+        src.mkdir(parents=True)
+        (src / "f.txt").write_text(src.name, encoding="utf-8")
+    selected = runtime.areas.add_area(name="Secili", source_path=str(selected_src))
+    other = runtime.areas.add_area(name="Haric", source_path=str(other_src))
+    runtime.areas.set_auto_backup(other.id, False)
+    runtime.schedule.update_schedule(ScheduleConfig(enabled=True, time="02:00"))
+    now = datetime.now().astimezone().replace(hour=2, minute=0, second=5, microsecond=0)
+    assert runtime.schedule.tick(now=now) is True
+    rows = [
+        r
+        for r in runtime.history.get_last_n(10)
+        if r.backup_type == BackupType.AUTOMATIC
+    ]
+    names = {r.area_name for r in rows}
+    assert selected.name in names
+    assert other.name not in names

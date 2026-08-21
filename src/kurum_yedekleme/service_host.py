@@ -13,7 +13,11 @@ from kurum_yedekleme.config.loader import default_config_path, load_settings
 from kurum_yedekleme.config.schema import AppSettings
 from kurum_yedekleme.core.lock import BackupInProgressError
 from kurum_yedekleme.services.runtime import AppRuntime, build_runtime
-from kurum_yedekleme.utils.logging_setup import SERVICE_LOG_FILE_NAME, setup_logging
+from kurum_yedekleme.utils.logging_setup import (
+    LOG_FILE_NAME,
+    SERVICE_LOG_FILE_NAME,
+    setup_logging,
+)
 from kurum_yedekleme.utils.paths import get_project_root, resolve_under_root
 
 logger = logging.getLogger(__name__)
@@ -66,6 +70,7 @@ def run_service_loop(
             settings.logging,
             also_console=False,
             file_name=SERVICE_LOG_FILE_NAME,
+            mirror_file_name=LOG_FILE_NAME,
         )
         runtime = build_runtime(settings, test_mode=False)
 

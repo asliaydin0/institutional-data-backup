@@ -56,6 +56,22 @@ def test_disable_area(runtime, area_source):
     assert runtime.areas.get(area.id).enabled is False
 
 
+def test_auto_backup_selection(runtime, tmp_path):
+    names = ["Secili", "Haric"]
+    areas = []
+    for name in names:
+        src = tmp_path / "OrtakAlan" / name
+        src.mkdir(parents=True)
+        (src / "f.txt").write_text(name, encoding="utf-8")
+        areas.append(runtime.areas.add_area(name=name, source_path=str(src)))
+    runtime.areas.set_auto_backup(areas[1].id, False)
+    automatic = runtime.areas.list_for_automatic()
+    assert [a.name for a in automatic] == ["Secili"]
+    assert runtime.areas.get(areas[1].id).auto_backup is False
+    enabled = runtime.areas.list_enabled()
+    assert {a.name for a in enabled} == {"Secili", "Haric"}
+
+
 def test_multiple_areas(runtime, tmp_path):
     names = ["Helal Akreditasyon", "Personel", "Destek Hizmetleri"]
     for name in names:

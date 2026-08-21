@@ -12,7 +12,7 @@ from kurum_yedekleme.db.errors import DatabaseError
 
 logger = logging.getLogger(__name__)
 
-CURRENT_SCHEMA_VERSION = 3
+CURRENT_SCHEMA_VERSION = 4
 
 MigrationFn = Callable[[sqlite3.Connection], None]
 
@@ -203,10 +203,21 @@ def _migration_003_areas_and_history(conn: sqlite3.Connection) -> None:
     logger.info("Migration v3 uygulandı (backup_areas + yeni history) @ %s", now)
 
 
+def _migration_004_auto_backup_flag(conn: sqlite3.Connection) -> None:
+    """Otomatik yedekte hangi alanların alınacağını saklar."""
+    cols = _table_columns(conn, "backup_areas")
+    if "auto_backup" not in cols:
+        conn.execute(
+            "ALTER TABLE backup_areas ADD COLUMN auto_backup INTEGER NOT NULL DEFAULT 1"
+        )
+    logger.info("Migration v4 uygulandı (auto_backup)")
+
+
 MIGRATIONS: dict[int, MigrationFn] = {
     1: _migration_001_baseline,
     2: _migration_002_backup_history,
     3: _migration_003_areas_and_history,
+    4: _migration_004_auto_backup_flag,
 }
 
 

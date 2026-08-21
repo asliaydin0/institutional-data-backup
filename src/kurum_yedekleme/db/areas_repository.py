@@ -37,6 +37,7 @@ def _row_to_area(row: sqlite3.Row) -> BackupArea:
         name=str(row["name"]),
         source_path=str(row["source_path"]),
         enabled=bool(row["enabled"]),
+        auto_backup=bool(row["auto_backup"]) if "auto_backup" in row.keys() else True,
         deleted=bool(row["deleted"]),
         created_at=_parse_dt(row["created_at"]),
         updated_at=_parse_dt(row["updated_at"]),
@@ -55,6 +56,7 @@ class AreasRepository:
         name: str,
         source_path: str,
         enabled: bool = True,
+        auto_backup: bool = True,
     ) -> BackupArea:
         now = _to_iso(_utc_now())
         conn = self._db.connect()
@@ -62,10 +64,18 @@ class AreasRepository:
             cursor = conn.execute(
                 """
                 INSERT INTO backup_areas (
-                    name, source_path, enabled, deleted, created_at, updated_at
-                ) VALUES (?, ?, ?, 0, ?, ?)
+                    name, source_path, enabled, auto_backup, deleted,
+                    created_at, updated_at
+                ) VALUES (?, ?, ?, ?, 0, ?, ?)
                 """,
-                (name.strip(), source_path.strip(), 1 if enabled else 0, now, now),
+                (
+                    name.strip(),
+                    source_path.strip(),
+                    1 if enabled else 0,
+                    1 if auto_backup else 0,
+                    now,
+                    now,
+                ),
             )
             conn.commit()
             area_id = int(cursor.lastrowid)
@@ -90,20 +100,27 @@ class AreasRepository:
         name: str,
         source_path: str,
         enabled: bool,
+        auto_backup: bool | None = None,
     ) -> BackupArea:
         now = _to_iso(_utc_now())
+        current = self.get_by_id(area_id, include_deleted=False)
+        if current is None:
+            raise DatabaseError(f"Alan bulunamadı: id={area_id}")
+        flag = current.auto_backup if auto_backup is None else bool(auto_backup)
         conn = self._db.connect()
         try:
             cursor = conn.execute(
                 """
                 UPDATE backup_areas
-                SET name = ?, source_path = ?, enabled = ?, updated_at = ?
+                SET name = ?, source_path = ?, enabled = ?, auto_backup = ?,
+                    updated_at = ?
                 WHERE id = ? AND deleted = 0
                 """,
                 (
                     name.strip(),
                     source_path.strip(),
                     1 if enabled else 0,
+                    1 if flag else 0,
                     now,
                     area_id,
                 ),
@@ -190,6 +207,29 @@ class AreasRepository:
             """
             SELECT * FROM backup_areas
             WHERE deleted = 0
+            ORDER BY name COLLATE NOCASE
+            """
+        ).fetchall()
+        return [_row_to_area(row) for row in rows]
+
+    def set_auto_backup(self, area_id: int, auto_backup: bool) -> BackupArea:
+        area = self.get_by_id(area_id, include_deleted=False)
+        if area is None:
+            raise DatabaseError(f"Alan bulunamadı: id={area_id}")
+        return self.update(
+            area_id,
+            name=area.name,
+            source_path=area.source_path,
+            enabled=area.enabled,
+            auto_backup=auto_backup,
+        )
+
+    def list_for_automatic(self) -> list[BackupArea]:
+        conn = self._db.connect()
+        rows = conn.execute(
+            """
+            SELECT * FROM backup_areas
+            WHERE deleted = 0 AND enabled = 1 AND auto_backup = 1
             ORDER BY name COLLATE NOCASE
             """
         ).fetchall()

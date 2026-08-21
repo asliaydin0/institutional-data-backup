@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import logging
 import threading
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -23,8 +22,9 @@ from kurum_yedekleme.services.disk_space import (
     validate_production_backup_root,
 )
 from kurum_yedekleme.services.history_service import HistoryService
+from kurum_yedekleme.utils.app_logger import get_logger
 
-logger = logging.getLogger(__name__)
+logger = get_logger("BackupManager")
 
 
 @dataclass
@@ -133,6 +133,13 @@ class BackupManager:
                 job.error = "Yedeklenecek aktif alan yok."
                 return job
 
+            logger.info(
+                "Yedekleme işi başladı tür=%s alan=%s",
+                backup_type.value,
+                ", ".join(area.name for area in selected),
+                operation="start",
+            )
+
             needed = 0
             runnable: list[BackupArea] = []
             for area in selected:
@@ -218,11 +225,13 @@ class BackupManager:
                 )
             self._history.complete_from_result(record_id, result)
             logger.info(
-                "Alan bitti name=%s status=%s type=%s size=%s",
+                "Alan bitti name=%s status=%s type=%s size=%s path=%s",
                 area.name,
                 result.status.value,
                 backup_type.value,
                 result.zip_size,
+                result.zip_path.name if result.zip_path else "-",
+                operation="finish",
             )
             return result
         except Exception as exc:
