@@ -236,7 +236,16 @@ Gerçek kurum klasörleri ve gerçek `E:\Yedekler` kullanılmaz; testler geçici
 .\scripts\verify_exe.bat
 ```
 
-Temiz PC: `dist\KurumYedekleme\` klasörünün **tamamını** kopyalayın. Servis kurulumu için Ayarlar veya `install_service.ps1`.
+Kurum PC’ye `dist\KurumYedekleme\` klasörünün **tamamını** kopyalayın (yalnızca `.exe` yetmez).
+
+1. `KurumYedekleme.exe` ile açın.
+2. Ayarlar: yedek kökü, otomatik saat. **Yedekleme Alanları:** birimleri ekleyin (boş gelir).
+3. **Şimdi Yedekle** ile manuel deneme.
+4. Yönetici: Ayarlar → **Servisi Kur** (UAC) — servis EXE’nin kendisini host eder.
+   veya EXE klasöründe: `.\install_service.ps1`
+5. Genel Bakış’ta Windows Service **Çalışıyor** olmalı.
+
+Otomatik yedek EXE penceresi kapalıyken de servisle alınır. Python / `.venv` kurum PC’de gerekmez.
 
 ## Production kontrol listesi
 

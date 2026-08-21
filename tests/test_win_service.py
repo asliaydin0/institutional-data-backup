@@ -58,6 +58,29 @@ def test_install_verifies_registration(
         win_service.install_win32_service()
 
 
+def test_frozen_service_host_uses_exe_flag(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(
+        "kurum_yedekleme.win_service.is_frozen",
+        lambda: True,
+    )
+    monkeypatch.setattr(
+        sys,
+        "executable",
+        r"C:\Kurulum\KurumYedekleme\KurumYedekleme.exe",
+    )
+    assert win_service.service_host_executable().endswith("KurumYedekleme.exe")
+    assert win_service.service_host_args() == "--win-service"
+
+
+def test_dev_service_host_uses_script(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(
+        "kurum_yedekleme.win_service.is_frozen",
+        lambda: False,
+    )
+    args = win_service.service_host_args()
+    assert args.endswith('win_service.py"') or "win_service.py" in args
+
+
 def test_service_class_is_importable_on_windows() -> None:
     if sys.platform != "win32":
         pytest.skip("Windows only")

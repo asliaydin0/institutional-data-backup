@@ -167,6 +167,8 @@ class SettingsPage(QWidget):
         self._hint = QLabel(
             "Otomatik yedekleme ve eski ZIP temizliği Windows Service tarafından "
             "çalıştırılır. GUI kapatılsa bile servis devam eder. "
+            "EXE kullanıyorsanız dist klasörünün tamamını kopyalayın; "
+            "sonra Ayarlar’dan «Servisi Kur» ve «Servisi Başlat». "
             "Alanlar SQLite'da tutulur."
         )
         self._hint.setObjectName("Muted")
@@ -495,12 +497,23 @@ class SettingsPage(QWidget):
                 raise RuntimeError(
                     "Kurulum tamamlandı ancak servis Windows'ta görünmüyor."
                 )
-            QMessageBox.information(
-                self,
-                "Servis",
-                "Windows Service kuruldu veya güncellendi.\n\n"
-                "«Servisi Başlat» ile çalıştırın.",
-            )
+            try:
+                start_service()
+            except Exception as start_exc:  # noqa: BLE001
+                QMessageBox.information(
+                    self,
+                    "Servis",
+                    "Windows Service kuruldu.\n\n"
+                    f"Otomatik başlatılamadı: {start_exc}\n"
+                    "«Servisi Başlat» ile deneyin.",
+                )
+            else:
+                QMessageBox.information(
+                    self,
+                    "Servis",
+                    "Windows Service kuruldu ve başlatıldı.\n\n"
+                    "Otomatik yedekleme artık arka planda çalışır.",
+                )
         except Exception as exc:  # noqa: BLE001
             QMessageBox.warning(self, "Servis", str(exc))
         self.refresh_service_status()

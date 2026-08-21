@@ -39,6 +39,11 @@ def _parse_args(argv: list[str]) -> argparse.Namespace:
         help="Windows Service / headless scheduler döngüsü (GUI yok).",
     )
     parser.add_argument(
+        "--win-service",
+        action="store_true",
+        help=argparse.SUPPRESS,
+    )
+    parser.add_argument(
         "--install-service",
         action="store_true",
         help="Windows Service kur (yönetici + pywin32).",
@@ -199,6 +204,11 @@ def main(argv: Optional[list[str]] = None) -> int:
     args_list = argv if argv is not None else sys.argv
     cli = _parse_args(args_list)
 
+    if cli.win_service:
+        from kurum_yedekleme.win_service import run_from_scm
+
+        run_from_scm()
+        return 0
     if cli.install_service:
         from kurum_yedekleme.win_service import install_win32_service
 

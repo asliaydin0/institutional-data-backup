@@ -31,6 +31,15 @@ hiddenimports = [
     "PySide6.QtWidgets",
     "yaml",
     "sqlite3",
+    "win32serviceutil",
+    "win32service",
+    "win32event",
+    "win32api",
+    "win32con",
+    "win32timezone",
+    "servicemanager",
+    "pywintypes",
+    "pythoncom",
     "kurum_yedekleme",
     "kurum_yedekleme.app",
     "kurum_yedekleme.service_host",
@@ -46,6 +55,18 @@ ps_datas, ps_binaries, ps_hidden = collect_all("PySide6")
 datas += ps_datas
 binaries += ps_binaries
 hiddenimports += ps_hidden
+
+# pywin32 — EXE içinden Windows Service kurulumu
+try:
+    import pywintypes
+    import pythoncom
+
+    for _mod in (pywintypes, pythoncom):
+        _path = getattr(_mod, "__file__", None)
+        if _path:
+            binaries.append((str(_path), "."))
+except ImportError:
+    pass
 
 # Paket alt modülleri
 hiddenimports += collect_submodules("kurum_yedekleme")

@@ -39,6 +39,7 @@ if errorlevel 1 (
 
 echo.
 echo Build tamam: dist\KurumYedekleme\KurumYedekleme.exe
+copy /Y "%~dp0install_service.ps1" "dist\KurumYedekleme\install_service.ps1" >nul
 if /i "%MODE%"=="debug" (
   echo Mod: DEBUG ^(console acik^)
 ) else (

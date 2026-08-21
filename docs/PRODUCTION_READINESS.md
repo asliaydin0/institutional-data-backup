@@ -21,6 +21,7 @@ README’deki madde listesi geçerlidir.
 Özellikle:
 
 - Servis `KurumYedekleme` otomatik başlar
+- EXE dağıtımında ImagePath `KurumYedekleme.exe --win-service` olmalıdır (venv python değil)
 - Kaynak UNC ise LocalSystem yerine domain hesabı gerekebilir
 - EXE kod imzası / antivirüs istisnası kurum politikasına bağlıdır
 - SQLite bozulursa `data/kurum_yedekleme.db` yeniden adlandırılır; uygulama yeni DB açar (geçmiş kaybolur — dosyayı saklayın)

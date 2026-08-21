@@ -1,8 +1,8 @@
 """pywin32 Windows Service sarmalayıcısı.
 
-Host olarak venv python.exe kullanılır (pythonservice.exe değil).
-SCM, ImagePath'teki python.exe ile bu dosyayı çalıştırır; paket
-venv site-packages / .pth üzerinden bulunur.
+Geliştirme: SCM, venv python.exe + bu .py dosyasını çalıştırır.
+EXE (PyInstaller): SCM, KurumYedekleme.exe --win-service çalıştırır.
+pythonservice.exe kullanılmaz.
 """
 
 from __future__ import annotations
@@ -13,18 +13,19 @@ import sys
 import threading
 from pathlib import Path
 
-# pythonservice / LocalSystem PYTHONPATH olmadan da src'yi görsün.
-_PROJECT_ROOT = Path(__file__).resolve().parents[2]
-_SRC_ROOT = _PROJECT_ROOT / "src"
-if _SRC_ROOT.is_dir():
-    _src = str(_SRC_ROOT)
-    if _src not in sys.path:
-        sys.path.insert(0, _src)
-
 from kurum_yedekleme.services.windows_service import SERVICE_DISPLAY, SERVICE_NAME
-from kurum_yedekleme.utils.paths import get_project_root
+from kurum_yedekleme.utils.paths import get_project_root, is_frozen
 
 logger = logging.getLogger(__name__)
+
+FROZEN_SERVICE_ARG = "--win-service"
+
+if not is_frozen():
+    _src_root = get_project_root() / "src"
+    if _src_root.is_dir():
+        _src = str(_src_root)
+        if _src not in sys.path:
+            sys.path.insert(0, _src)
 
 _SERVICE_SCRIPT = Path(__file__).resolve()
 
@@ -46,12 +47,27 @@ def _require_pywin32():
     return servicemanager, win32event, win32service, win32serviceutil
 
 
-def _host_python() -> str:
-    """venv python.exe — pythonservice.exe venv site-packages yüklemez."""
-    venv_python = _PROJECT_ROOT / ".venv" / "Scripts" / "python.exe"
+def service_host_executable() -> str:
+    """SCM ImagePath yürütücüsü: EXE veya venv python.exe."""
+    if is_frozen():
+        return str(Path(sys.executable).resolve())
+    venv_python = get_project_root() / ".venv" / "Scripts" / "python.exe"
     if venv_python.is_file():
         return str(venv_python)
-    return sys.executable
+    return str(Path(sys.executable).resolve())
+
+
+def service_host_args() -> str:
+    """SCM ImagePath argümanları."""
+    if is_frozen():
+        return FROZEN_SERVICE_ARG
+    return f'"{_SERVICE_SCRIPT}"'
+
+
+def _install_argv0() -> str:
+    if is_frozen():
+        return service_host_executable()
+    return str(_SERVICE_SCRIPT)
 
 
 def _build_service_class():
@@ -61,10 +77,10 @@ def _build_service_class():
         _svc_name_ = SERVICE_NAME
         _svc_display_name_ = SERVICE_DISPLAY
         _svc_description_ = (
-            "Kurum klasörlerini seçilen yedek kökü altına ZIP olarak yedekler."
+            "Veri Yedekleme Sistemi — kurum klasörlerini ZIP olarak yedekler."
         )
-        _exe_name_ = _host_python()
-        _exe_args_ = f'"{_SERVICE_SCRIPT}"'
+        _exe_name_ = service_host_executable()
+        _exe_args_ = service_host_args()
 
         def __init__(self, args):
             win32serviceutil.ServiceFramework.__init__(self, args)
@@ -112,25 +128,37 @@ def _service_util():
 def _configure_installed_service() -> None:
     from kurum_yedekleme.utils.sitepath import ensure_src_pth, src_root
 
+    if is_frozen():
+        _set_service_app_directory()
+        return
     ensure_src_pth()
     _, win32serviceutil = _service_util()
-    root = str(get_project_root())
-    win32serviceutil.SetServiceCustomOption(SERVICE_NAME, "AppDirectory", root)
+    win32serviceutil.SetServiceCustomOption(
+        SERVICE_NAME, "AppDirectory", str(get_project_root())
+    )
     _set_service_pythonpath(src_root())
     _set_pythonclass_file_path()
 
 
 def _set_pythonclass_file_path() -> None:
-    """SCM'nin paketi değil, bu .py dosyasını yüklemesini sağlar."""
+    """SCM'nin paketi değil, bu .py dosyasını yüklemesini sağlar (yalnızca venv)."""
+    if is_frozen():
+        return
     try:
-        import win32api
-        import win32con
         import win32serviceutil
     except ImportError:
         return
     class_str = os.path.splitext(str(_SERVICE_SCRIPT))[0] + ".KurumYedeklemeWinService"
     win32serviceutil.InstallPythonClassString(class_str, SERVICE_NAME)
-    # python.exe host: çalışma dizini proje kökü olsun
+    _set_service_app_directory()
+
+
+def _set_service_app_directory() -> None:
+    try:
+        import win32api
+        import win32con
+    except ImportError:
+        return
     key = win32api.RegCreateKey(
         win32con.HKEY_LOCAL_MACHINE,
         rf"SYSTEM\CurrentControlSet\Services\{SERVICE_NAME}\Parameters",
@@ -176,13 +204,14 @@ def install_win32_service() -> None:
             "Yönetici PowerShell'de scripts\\install_service.ps1 çalıştırın."
         )
 
-    ensure_src_pth()
+    if not is_frozen():
+        ensure_src_pth()
     cls, util = _service_util()
     status = query_service()
     command = "update" if status.state != "not_installed" else "install"
     saved = sys.argv[:]
     try:
-        sys.argv = [str(_SERVICE_SCRIPT), "--startup=auto", command]
+        sys.argv = [_install_argv0(), "--startup=auto", command]
         util.HandleCommandLine(cls)
     finally:
         sys.argv = saved
@@ -213,7 +242,7 @@ def remove_win32_service() -> None:
     cls, util = _service_util()
     saved = sys.argv[:]
     try:
-        sys.argv = [str(_SERVICE_SCRIPT), "remove"]
+        sys.argv = [_install_argv0(), "remove"]
         util.HandleCommandLine(cls)
     finally:
         sys.argv = saved
@@ -227,13 +256,8 @@ def remove_win32_service() -> None:
     logger.info("Windows Service kaldırıldı: %s", SERVICE_NAME)
 
 
-def HandleCommandLine() -> None:
-    cls, util = _service_util()
-    util.HandleCommandLine(cls)
-
-
-def _run_from_scm() -> None:
-    """SCM python.exe ile bu dosyayı başlattığında denetleyiciye bağlan."""
+def run_from_scm() -> None:
+    """Windows SCM bu süreci başlattığında denetleyiciye bağlan."""
     servicemanager, _, _, _ = _require_pywin32()
     cls, _util = _service_util()
     servicemanager.Initialize(SERVICE_NAME, None)
@@ -241,9 +265,14 @@ def _run_from_scm() -> None:
     servicemanager.StartServiceCtrlDispatcher()
 
 
+def HandleCommandLine() -> None:
+    cls, util = _service_util()
+    util.HandleCommandLine(cls)
+
+
 if __name__ == "__main__":
-    # SCM: argv yalnızca bu script. Kurulum: install / remove / update.
+    # SCM (venv): argv yalnızca bu script. Kurulum: install / remove / update.
     if len(sys.argv) == 1:
-        _run_from_scm()
+        run_from_scm()
     else:
         HandleCommandLine()
